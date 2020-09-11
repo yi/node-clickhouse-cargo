@@ -31,8 +31,8 @@ class Cargo
   exam : (forceUpload)->
     return
 
-  push : (data)->
-    @curBulk.push(data)
+  push : ->
+    @curBulk.push(Array.from(arguments))
     return ++@count
 
 
