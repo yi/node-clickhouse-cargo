@@ -1,0 +1,57 @@
+
+debuglog = require("debug")("chcargo:index")
+ClickHouse = require('@apla/clickhouse')
+assert = require "assert"
+
+ClickHouseClient = null
+
+# for how long (in ms) one bulk should keep accumlate inserts
+DEFAULT_BULK_TTL = 30 * 1000
+MIN_BULK_TTL = 1000
+
+STATEMENT_TO_CARGO = {}
+
+init = (config)->
+  assert ClickHouseClient is null, "ClickHouseClient has already inited"
+  assert config and config.host, "missing host in config"
+  ClickHouseClient = new ClickHouse(config)
+  ClickHouseClient.ping (err)-> throw(err) if err
+  return
+
+# Create a cargo instance.
+# Cargos are bind to statements. Call create multiple times with the same statement, will result in one shared cargo.
+# @param statement String, sql insert statement
+# @param bulkTTL Int, ttl(in ms) for flush accumlated inserts. default: 30000, min: 1000
+createCargo = (statement, bulkTTL)->
+  assert  ClickHouseClient, "ClickHouseClient needs to be inited first"
+  statement = String(statement || "").trim()
+  assert statement, "statement must not be blank"
+
+  bulkTTL = parseInt(bulkTTL) || DEFAULT_BULK_TTL
+  bulkTTL = MIN_BULK_TTL if bulkTTL < MIN_BULK_TTL
+
+  cargo = STATEMENT_TO_CARGO[statement] || new Cargo(ClickHouseClient, statement, bulkTTL)
+  STATEMENT_TO_CARGO[statement] = cargo
+  debuglog "[createCargo] cargo:", cargo
+  return cargo
+
+
+## static init
+# NOTE: with env:CLICKHOUSE_CARGO_PROFILE, try init automatically
+if process.env.CLICKHOUSE_CARGO_PROFILE
+  profileName = process.env.CLICKHOUSE_CARGO_PROFILE
+  profileName += ".json" unless path.extname(profileName) is ".json"
+  pathToConfig = path.join(os.homedir(), ".clickhouse-cargo", process.env.CLICKHOUSE_CARGO_PROFILE + ".json")
+  debuglog "[static init] try auto init from CLICKHOUSE_CARGO_PROFILE"
+  try
+    profileConfig = JSON.parse(fs.readFileSync(pathToConfig))
+  catch err
+    debuglog "[static init] failed error:", err
+    init(profileConfig)
+
+module.exports =
+  init : init
+  createCargo : createCargo
+
+
+
