@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "watch": "./node_modules/.bin/coffee -o ./lib/ -cw ./src/",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha --recursive ./lib/test -R spec"
   },
   "repository": {
     "type": "git",
@@ -24,7 +24,8 @@
   "homepage": "https://github.com/yi/node-clickhouse-cargo#readme",
   "devDependencies": {
     "coffeescript": "^2.5.1",
-    "mocha": "^8.1.3"
+    "mocha": "^8.1.3",
+    "nyc": "^15.1.0"
   },
   "dependencies": {
     "@apla/clickhouse": "^1.6.3",

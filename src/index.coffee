@@ -2,6 +2,9 @@
 debuglog = require("debug")("chcargo:index")
 ClickHouse = require('@apla/clickhouse')
 assert = require "assert"
+path = require "path"
+os = require "os"
+fs = require "fs"
 
 ClickHouseClient = null
 
@@ -53,8 +56,8 @@ if process.env.CLICKHOUSE_CARGO_PROFILE
   try
     profileConfig = JSON.parse(fs.readFileSync(pathToConfig))
   catch err
-    debuglog "[static init] failed error:", err
-    init(profileConfig)
+    debuglog "[static init] FAILED error:", err
+  init(profileConfig)
 
 # self examination routine
 setInterval(examCargos, MIN_BULK_TTL)
@@ -62,6 +65,7 @@ setInterval(examCargos, MIN_BULK_TTL)
 module.exports =
   init : init
   createCargo : createCargo
+  isInited : -> return not not ClickHouseClient
 
 
 
