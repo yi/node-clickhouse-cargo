@@ -5,6 +5,7 @@ assert = require "assert"
 path = require "path"
 os = require "os"
 fs = require "fs"
+Cargo = require "./cargo"
 
 ClickHouseClient = null
 
@@ -30,6 +31,8 @@ createCargo = (statement, bulkTTL)->
   assert  ClickHouseClient, "ClickHouseClient needs to be inited first"
   statement = String(statement || "").trim()
   assert statement, "statement must not be blank"
+
+  assert  statement.toUpperCase().startsWith("INSERT"), "statement must be an insert sql"
 
   bulkTTL = parseInt(bulkTTL) || DEFAULT_BULK_TTL
   bulkTTL = MIN_BULK_TTL if bulkTTL < MIN_BULK_TTL

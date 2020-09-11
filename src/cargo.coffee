@@ -33,8 +33,7 @@ class Cargo
 
   push : (data)->
     @curBulk.push(data)
-    ++@count
-    return
+    return ++@count
 
 
 module.exports = Cargo
