@@ -12,7 +12,9 @@
     "url": "git+https://github.com/yi/node-clickhouse-cargo.git"
   },
   "keywords": [
-    "clickhouse"
+    "clickhouse",
+    "database",
+    "db"
   ],
   "author": "Yi",
   "license": "ISC",
@@ -21,12 +23,11 @@
   },
   "homepage": "https://github.com/yi/node-clickhouse-cargo#readme",
   "devDependencies": {
-    "coffeescript": "^2.5.1"
+    "coffeescript": "^2.5.1",
+    "mocha": "^8.1.3"
   },
   "dependencies": {
     "@apla/clickhouse": "^1.6.3",
-    "debug": "^4.1.1",
-    "lodash": "^4.17.20",
-    "nanoid": "^3.1.12"
+    "debug": "^4.1.1"
   }
 }

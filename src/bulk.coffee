@@ -1,8 +1,7 @@
-{ nanoid } = require 'nanoid'
 
 class Bulk
   constructor: ->
-    @id = nanoid()
+    @id = Date.now().toString(36)
     @count = 0
     return
 

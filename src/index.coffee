@@ -23,6 +23,7 @@ init = (config)->
 # @param statement String, sql insert statement
 # @param bulkTTL Int, ttl(in ms) for flush accumlated inserts. default: 30000, min: 1000
 createCargo = (statement, bulkTTL)->
+  debuglog "[createCargo] statement:#{statement}, bulkTTL:#{bulkTTL}"
   assert  ClickHouseClient, "ClickHouseClient needs to be inited first"
   statement = String(statement || "").trim()
   assert statement, "statement must not be blank"
@@ -35,6 +36,12 @@ createCargo = (statement, bulkTTL)->
   debuglog "[createCargo] cargo:", cargo
   return cargo
 
+examCargos = ->
+  debuglog "[examCargos]"
+  for statement, cargo of STATEMENT_TO_CARGO
+    # TODO: implment searial async
+    cargo.exam()
+  return
 
 ## static init
 # NOTE: with env:CLICKHOUSE_CARGO_PROFILE, try init automatically
@@ -48,6 +55,9 @@ if process.env.CLICKHOUSE_CARGO_PROFILE
   catch err
     debuglog "[static init] failed error:", err
     init(profileConfig)
+
+# self examination routine
+setInterval(examCargos, MIN_BULK_TTL)
 
 module.exports =
   init : init
