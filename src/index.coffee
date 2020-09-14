@@ -75,6 +75,6 @@ module.exports =
   init : init
   createCargo : createCargo
   isInited : -> return not not ClickHouseClient
-
+  getClickHouseClient : -> return ClickHouseClient
 
 

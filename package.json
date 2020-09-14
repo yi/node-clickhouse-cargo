@@ -11,6 +11,9 @@
     "type": "git",
     "url": "git+https://github.com/yi/node-clickhouse-cargo.git"
   },
+  "engines": {
+    "node": ">=8.0"
+  },
   "keywords": [
     "clickhouse",
     "database",

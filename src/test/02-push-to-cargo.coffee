@@ -22,11 +22,10 @@ describe "push log to cargo", ->
     done()
     return
 
-
-  after (done)->
-    process.exit()
-    done()
-    return
+  #after (done)->
+    #process.exit()
+    #done()
+    #return
 
   it "push to cargo", (done)->
 

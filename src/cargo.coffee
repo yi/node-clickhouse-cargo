@@ -26,7 +26,7 @@ class Cargo
     if @curBulk
       @bulks.push(@curBulk)
 
-    @curBulk = new Bulk(@clichouseClient, @workingPath)
+    @curBulk = new Bulk(@workingPath)
     @curBulk.expire(@bulkTTL)
     return
 
@@ -46,7 +46,7 @@ class Cargo
       if bulk.isCommitted()
         bulksToRemove.push(bulk)
       else
-        bulk.commit()
+        bulk.commit(@statement)
 
     for bulk in bulksToRemove
       pos = @bulks.indexOf(bulk)
@@ -57,6 +57,8 @@ class Cargo
   push : ->
     @curBulk.push(Array.from(arguments))
     return ++@count
+
+  getRetiredBulks : -> return @bulks.concat()
 
 
 module.exports = Cargo
