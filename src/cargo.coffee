@@ -11,7 +11,7 @@ class Cargo
 
   toString : -> "'[Cargo #{@id}@#{@workingPath}]"
 
-  constructor: (clichouseClient, @statement, @bulkTTL)->
+  constructor: (@clichouseClient, @statement, @bulkTTL)->
     @id = Date.now().toString(36)
     @count = 0
     @workingPath = fs.mkdtempSync(path.join(os.tmpdir(), FOLDER_PREFIX))
@@ -23,12 +23,33 @@ class Cargo
   moveToNextBulk : ->
     if @curBulk
       @bulks.push(@curBulk)
-      @curBulk.upload()
 
-    @curBulk = new Bulk(@workingPath)
+    @curBulk = new Bulk(@clichouseClient, @workingPath)
+    @curBulk.expire(@bulkTTL)
     return
 
-  exam : (forceUpload)->
+  # routine to exame each bulk belongs to this cargo
+  exam : ()->
+    debuglog "#{@} [exam]"
+
+    if @curBulk
+      if @curBulk.isEmpty()
+        # lazy: keep ttl when bulk is empty
+        @curBulk.expire(@bulkTTL)
+      else if @curBulk.isExpired()
+        @moveToNextBulk()
+
+    bulksToRemove = []
+    for bulk in @bulks
+      if bulk.isCommitted()
+        bulksToRemove.push(bulk)
+      else
+        bulk.commit()
+
+    for bulk in bulksToRemove
+      pos = @bulks.indexOf(bulk)
+      @bulks.splice(pos, 1) if pos >= 0
+
     return
 
   push : ->
