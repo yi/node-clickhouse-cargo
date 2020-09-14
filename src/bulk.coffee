@@ -44,8 +44,13 @@ class Bulk
     line =  JSON.stringify(arr)
     #debuglog "#{@} [push] line:", line
 
-    @outputStream.write((if @count > 0 then "\n" else "") + line)
+    @outputStream.cork() if @count % 100 is 0
+
+    @outputStream.write((if @count > 0 then "\n" else "") + line, 'utf8')
     ++@count
+
+    if @count % 100 is 0
+      process.nextTick(()=> @outputStream.uncork())
     return
 
   # set the expiration of this bulk

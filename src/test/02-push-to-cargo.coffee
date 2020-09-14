@@ -4,6 +4,9 @@ fs = require "fs"
 
 QUERY = "INSERT INTO test.cargo0 FORMAT JSONCompactEachRow"
 
+#NUM_OF_LINE = 80
+NUM_OF_LINE = 100  # NOTE: bulk flushs every 100 lines
+
 describe "push log to cargo", ->
   @timeout(5000)
 
@@ -27,7 +30,7 @@ describe "push log to cargo", ->
 
   it "push to cargo", (done)->
 
-    for i in [0...100]
+    for i in [0...NUM_OF_LINE]
       theCargo.push new Date, i, "string"
 
     assert fs.existsSync(theFilepath), "log file not exist on #{theFilepath}"
@@ -39,7 +42,7 @@ describe "push log to cargo", ->
     contentInHDArr =  contentInHD.split(/\r|\n|\r\n/)
 
     console.log "[exam hd content] contentInHDArr:", contentInHDArr.length
-    assert contentInHDArr.length is 100, "unmatching output length"
+    assert contentInHDArr.length is NUM_OF_LINE, "unmatching output length"
 
     for line, i in contentInHDArr
       line = JSON.parse(line)
