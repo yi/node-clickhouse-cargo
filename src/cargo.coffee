@@ -7,6 +7,7 @@ Bulk = require "./bulk"
 FOLDER_PREFIX = "clichouse-cargo-"
 
 
+
 class Cargo
   #toString : -> "[Cargo #{@id}@#{@workingPath}]"
   toString : -> "[Cargo #{@id}]"
@@ -50,10 +51,11 @@ class Cargo
       else
         bulk.commit(@clichouseClient, @statement)
 
-    debuglog "#{@} [exam], bulksToRemove:", bulksToRemove
+    debuglog "#{@} [exam], bulks:", @bulks.length, ", bulksToRemove:", bulksToRemove.length
 
     for bulk in bulksToRemove
       pos = @bulks.indexOf(bulk)
+      debuglog "#{@} [exam] remove bulk: #{bulk.toString()}@#{pos}"
       @bulks.splice(pos, 1) if pos >= 0
 
     return

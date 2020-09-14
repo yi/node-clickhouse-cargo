@@ -10,6 +10,7 @@ StaticCountWithProcess = 0
 # cork stream write
 NUM_OF_LINES_TO_CORK = 100
 
+noop = -> return
 
 toSQLDateString = (date)->
   #debuglog "[toSQLDateString] date:", date
@@ -48,7 +49,7 @@ class Bulk
       arr[i] = toSQLDateString(item) if (item instanceof Date)
 
     line =  JSON.stringify(arr)
-    debuglog "#{@} [push] line:", line
+    #debuglog "#{@} [push] line:", line
 
     # the primary intent of writable.cork() is to accommodate a situation in which several small chunks are written to the stream in rapid succession.
     @outputStream.cork() if @count % NUM_OF_LINES_TO_CORK is 0
@@ -86,18 +87,23 @@ class Bulk
         return
 
       #dbStream = clichouseClient.query statement, (err)=>
-      dbStream = clichouseClient.query statement, { format: 'JSONCompactEachRow' }, (err)=>
+      dbStream = clichouseClient.query statement, {format:'JSONCompactEachRow'}, (err)=>
         if err?
           debuglog "#{@} [commit] FAIL db query. error:", err
           @_committing = false  #unlock
           return
 
-        @_committing = false
-        @_committed = true
-        theOutputStream.destroy()
-        readableStream.destroy()
-        fs.unlink(@pathToFile)  # remove the physical file
-        debuglog "#{@} [commit] success"
+        try
+          @_committing = false
+          @_committed = true
+          theOutputStream.destroy()
+          readableStream.destroy()
+          fs.unlink(@pathToFile, noop)  # remove the physical file
+          debuglog "#{@} [commit] success"
+        catch err
+          debuglog "#{@} [commit] FAILED error:", err
+
+
         return
 
       readableStream = fs.createReadStream(@pathToFile)

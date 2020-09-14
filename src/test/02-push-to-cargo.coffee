@@ -2,7 +2,14 @@
 assert = require ("assert")
 fs = require "fs"
 
-QUERY = "INSERT INTO test.cargo0 FORMAT JSONCompactEachRow"
+TABLE_NAME = "cargo_test.unittest02_#{Date.now().toString(36)}"
+
+QUERY = "INSERT INTO #{TABLE_NAME} "
+
+STATEMENT_INSERT = "INSERT INTO #{TABLE_NAME}"
+
+STATEMENT_DROP_TABLE = "DROP TABLE #{TABLE_NAME}"
+
 
 #NUM_OF_LINE = 80
 NUM_OF_LINE = 100  # NOTE: bulk flushs every 100 lines
