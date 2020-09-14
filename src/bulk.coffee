@@ -41,10 +41,11 @@ class Bulk
     for item, i in arr
       item[i] = toSQLDateString(item) if item instanceof Date
 
-    line =  JSON.stringify(arr) + "\n"
-    debuglog "#{@} [push] line:", line
+    line =  JSON.stringify(arr)
+    #debuglog "#{@} [push] line:", line
 
-    @outputStream.write(line)
+    @outputStream.write((if @count > 0 then "\n" else "") + line)
+    ++@count
     return
 
   # set the expiration of this bulk

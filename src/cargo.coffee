@@ -8,10 +8,10 @@ FOLDER_PREFIX = "clichouse-cargo-"
 
 
 class Cargo
-
-  toString : -> "'[Cargo #{@id}@#{@workingPath}]"
+  toString : -> "[Cargo #{@id}@#{@workingPath}]"
 
   constructor: (@clichouseClient, @statement, @bulkTTL)->
+    debuglog "[new Cargo] @statement:#{@statement}, @bulkTTL:#{@bulkTTL}"
     @id = Date.now().toString(36)
     @count = 0
     @workingPath = fs.mkdtempSync(path.join(os.tmpdir(), FOLDER_PREFIX))
@@ -19,6 +19,8 @@ class Cargo
     @bulks = []
     @moveToNextBulk()
     return
+
+  setBulkTTL : (val)-> @bulkTTL = val
 
   moveToNextBulk : ->
     if @curBulk

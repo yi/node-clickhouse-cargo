@@ -37,9 +37,15 @@ createCargo = (statement, bulkTTL)->
   bulkTTL = parseInt(bulkTTL) || DEFAULT_BULK_TTL
   bulkTTL = MIN_BULK_TTL if bulkTTL < MIN_BULK_TTL
 
-  cargo = STATEMENT_TO_CARGO[statement] || new Cargo(ClickHouseClient, statement, bulkTTL)
+  cargo = STATEMENT_TO_CARGO[statement]
+  if cargo
+    cargo.setBulkTTL(bulkTTL)
+    debuglog "[createCargo] reuse cargo:", cargo.toString()
+    return cargo
+
+  cargo = new Cargo(ClickHouseClient, statement, bulkTTL)
   STATEMENT_TO_CARGO[statement] = cargo
-  debuglog "[createCargo] cargo:", cargo
+  debuglog "[createCargo] cargo:", cargo.toString()
   return cargo
 
 examCargos = ->
