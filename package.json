@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "watch": "./node_modules/.bin/coffee -o ./lib/ -cw ./src/",
-    "test": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha --recursive ./lib/test -R spec"
+    "test": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha --recursive ./lib/test/03-commit-bulk.js -R spec",
+    "test-full": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha --recursive ./lib/test -R spec"
   },
   "repository": {
     "type": "git",

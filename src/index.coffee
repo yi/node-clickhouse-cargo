@@ -10,7 +10,7 @@ Cargo = require "./cargo"
 ClickHouseClient = null
 
 # for how long (in ms) one bulk should keep accumlate inserts
-DEFAULT_BULK_TTL = 30 * 1000
+DEFAULT_BULK_TTL = 5 * 1000
 MIN_BULK_TTL = 1000
 
 STATEMENT_TO_CARGO = {}

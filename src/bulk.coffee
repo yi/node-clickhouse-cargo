@@ -12,6 +12,7 @@ NUM_OF_LINES_TO_CORK = 100
 
 
 toSQLDateString = (date)->
+  #debuglog "[toSQLDateString] date:", date
   return date.getUTCFullYear() + '-' +
     ('00' + (date.getUTCMonth()+1)).slice(-2) + '-' +
     ('00' + date.getUTCDate()).slice(-2) + ' ' +
@@ -44,10 +45,10 @@ class Bulk
       return
 
     for item, i in arr
-      item[i] = toSQLDateString(item) if item instanceof Date
+      arr[i] = toSQLDateString(item) if (item instanceof Date)
 
     line =  JSON.stringify(arr)
-    #debuglog "#{@} [push] line:", line
+    debuglog "#{@} [push] line:", line
 
     # the primary intent of writable.cork() is to accommodate a situation in which several small chunks are written to the stream in rapid succession.
     @outputStream.cork() if @count % NUM_OF_LINES_TO_CORK is 0
@@ -74,7 +75,7 @@ class Bulk
     assert statement, "missing insert statment"
 
     @_committing = true  #lock
-    debuglog "#{@} [commit] go committing"
+    debuglog "#{@} [commit] go committing:", statement
 
     theOutputStream = @outputStream
 
@@ -84,7 +85,8 @@ class Bulk
         @_committing = false  #unlock
         return
 
-      dbStream = clichouseClient.query statement, (err)=>
+      #dbStream = clichouseClient.query statement, (err)=>
+      dbStream = clichouseClient.query statement, { format: 'JSONCompactEachRow' }, (err)=>
         if err?
           debuglog "#{@} [commit] FAIL db query. error:", err
           @_committing = false  #unlock

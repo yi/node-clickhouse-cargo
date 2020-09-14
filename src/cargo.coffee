@@ -8,7 +8,8 @@ FOLDER_PREFIX = "clichouse-cargo-"
 
 
 class Cargo
-  toString : -> "[Cargo #{@id}@#{@workingPath}]"
+  #toString : -> "[Cargo #{@id}@#{@workingPath}]"
+  toString : -> "[Cargo #{@id}]"
 
   constructor: (@clichouseClient, @statement, @bulkTTL)->
     debuglog "[new Cargo] @statement:#{@statement}, @bulkTTL:#{@bulkTTL}"
@@ -23,6 +24,7 @@ class Cargo
   setBulkTTL : (val)-> @bulkTTL = val
 
   moveToNextBulk : ->
+    debuglog "#{@} [moveToNextBulk]"
     if @curBulk
       @bulks.push(@curBulk)
 
@@ -46,7 +48,9 @@ class Cargo
       if bulk.isCommitted()
         bulksToRemove.push(bulk)
       else
-        bulk.commit(@statement)
+        bulk.commit(@clichouseClient, @statement)
+
+    debuglog "#{@} [exam], bulksToRemove:", bulksToRemove
 
     for bulk in bulksToRemove
       pos = @bulks.indexOf(bulk)
