@@ -8,6 +8,7 @@
     "test01": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha --recursive ./lib/test/01-create-cargo.js -R spec",
     "test02": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha --recursive ./lib/test/02-push-to-cargo.js -R spec",
     "test03": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha --recursive ./lib/test/03-commit-bulk.js -R spec",
+    "test04": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha --recursive ./lib/test/04-restore-local-bulks.js -R spec",
     "test": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha --recursive ./lib/test -R spec"
   },
   "repository": {

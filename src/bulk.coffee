@@ -12,7 +12,7 @@ NUM_OF_LINES_TO_CORK = 100
 
 FILENAME_PREFIX = "bulk-"
 
-noop = -> return
+NOOP = -> return
 
 toSQLDateString = (date)->
   #debuglog "[toSQLDateString] date:", date
@@ -106,7 +106,7 @@ class Bulk
           @_committed = true
           theOutputStream.destroy()
           readableStream.destroy()
-          fs.unlink(@pathToFile, noop)  # remove the physical file
+          fs.unlink(@pathToFile, NOOP)  # remove the physical file
           debuglog "#{@} [commit] success"
         catch err
           debuglog "#{@} [commit] FAILED error:", err
@@ -127,7 +127,7 @@ class Bulk
 
 
 Bulk.FILENAME_PREFIX = FILENAME_PREFIX
-
+Bulk.toSQLDateString = toSQLDateString
 
 module.exports = Bulk
 
