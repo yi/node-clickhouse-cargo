@@ -15,9 +15,23 @@ MIN_BULK_TTL = 1000
 
 STATEMENT_TO_CARGO = {}
 
+PathToCargoFile = null
+
+
 init = (config)->
   assert ClickHouseClient is null, "ClickHouseClient has already inited"
   assert config and config.host, "missing host in config"
+
+  # prepare disk path
+  PathToCargoFile = path.resolve(process.cwd(), config.cargoPath || "cargo_files")
+  debuglog "[init] PathToCargoFile:", PathToCargoFile
+  delete config.cargoPath
+
+  if fs.existsSync(PathToCargoFile)
+    assert fs.statSync(PathToCargoFile).isDirectory(), "#{PathToCargoFile} is not a directory"
+  else
+    fs.mkdirSync(PathToCargoFile, {recursive:true, mode: 0o755})
+
   ClickHouseClient = new ClickHouse(config)
   ClickHouseClient.ping (err)-> throw(err) if err
   return
@@ -43,7 +57,7 @@ createCargo = (statement, bulkTTL)->
     debuglog "[createCargo] reuse cargo:", cargo.toString()
     return cargo
 
-  cargo = new Cargo(ClickHouseClient, statement, bulkTTL)
+  cargo = new Cargo(ClickHouseClient, statement, bulkTTL, PathToCargoFile)
   STATEMENT_TO_CARGO[statement] = cargo
   debuglog "[createCargo] cargo:", cargo.toString()
   return cargo

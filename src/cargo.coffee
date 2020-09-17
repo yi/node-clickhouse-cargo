@@ -1,28 +1,44 @@
 fs = require "fs"
 os = require "os"
 path = require "path"
+crypto = require('crypto')
+assert = require "assert"
 debuglog = require("debug")("chcargo:cargo")
 Bulk = require "./bulk"
 
-FOLDER_PREFIX = "clichouse-cargo-"
-
-
+FOLDER_PREFIX = "cargo-"
 
 class Cargo
   #toString : -> "[Cargo #{@id}@#{@workingPath}]"
   toString : -> "[Cargo #{@id}]"
 
-  constructor: (@clichouseClient, @statement, @bulkTTL)->
+  constructor: (@clichouseClient, @statement, @bulkTTL, pathToCargoFile, skipRestoration)->
     debuglog "[new Cargo] @statement:#{@statement}, @bulkTTL:#{@bulkTTL}"
-    @id = Date.now().toString(36)
+    #@id = Date.now().toString(36)
+    @id = crypto.createHash('md5').update(@statement).digest("hex")
     @count = 0
-    @workingPath = fs.mkdtempSync(path.join(os.tmpdir(), FOLDER_PREFIX))
-    @curBulk = null
     @bulks = []
+
+    #@workingPath = fs.mkdtempSync(path.join(os.tmpdir(), FOLDER_PREFIX))
+    @workingPath = path.join(pathToCargoFile, FOLDER_PREFIX + @id)
+
+    if fs.existsSync(@workingPath)
+      # directory already exists
+      assert fs.statSync(@workingPath).isDirectory(), "#{PathToCargoFile} is not a directory"
+      @restoreExistingFiles() unless skipRestoration
+    else
+      # create directory
+      fs.mkdirSync(@workingPath)
+
+    @curBulk = null
     @moveToNextBulk()
     return
 
   setBulkTTL : (val)-> @bulkTTL = val
+
+  restoreExistingFiles : ->
+    return
+
 
   moveToNextBulk : ->
     debuglog "#{@} [moveToNextBulk]"
