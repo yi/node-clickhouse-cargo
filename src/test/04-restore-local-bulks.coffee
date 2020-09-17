@@ -39,7 +39,6 @@ describe "restore-local-bulks", ->
   @timeout(60000)
 
   theCargo = null
-  theBulk = null
   theFilepath = null
 
   before (done)->
@@ -56,28 +55,65 @@ describe "restore-local-bulks", ->
     return
 
   it "prepare local bulks", (done)->
-    PathToCargoFile = path.join(process.cwd(), "cargo_files", "cargo-" + crypto.createHash('md5').update(STATEMENT_INSERT).digest("hex"))
 
-    if fs.existsSync(PathToCargoFile)
-      assert fs.statSync(PathToCargoFile).isDirectory(), "#{PathToCargoFile} is not a directory"
-    else
-      fs.mkdirSync(PathToCargoFile, {recursive:true, mode: 0o755})
+    try
+      PathToCargoFile = path.join(process.cwd(), "cargo_files", "cargo-" + crypto.createHash('md5').update(STATEMENT_INSERT).digest("hex"))
 
-    bulkId = Bulk.FILENAME_PREFIX + Date.now().toString(36) + "_1"
-    pathToBulk = path.join(PathToCargoFile, bulkId)
-    debuglog "[prepare] pathToBulk:", pathToBulk
-    outputStream = fs.createWriteStream(pathToBulk)
+      if fs.existsSync(PathToCargoFile)
+        assert fs.statSync(PathToCargoFile).isDirectory(), "#{PathToCargoFile} is not a directory"
+      else
+        fs.mkdirSync(PathToCargoFile, {recursive:true, mode: 0o755})
 
-    for i in NUM_OF_LINE
-      arr = [toSQLDateString(new Date), i, "local-bulk"]
-      line = JSON.stringify(arr)
-      outputStream.write((if i > 0 then "\n" else "") + line, 'utf8')
+      bulkId = FILENAME_PREFIX + Date.now().toString(36) + "_1"
+      theFilepath = path.join(PathToCargoFile, bulkId)
+      debuglog "[prepare] theFilepath:", theFilepath
 
-    theCargo = createCargo(STATEMENT_INSERT)
-    theBulk = theCargo.curBulk
-    theFilepath = theBulk.pathToFile
+      content = ""
+      for i in [0...NUM_OF_LINE]
+        arr = [toSQLDateString(new Date), i, "local-bulk"]
+        content += JSON.stringify(arr) + "\n"
+      content = content.substr(0, content.length - 1)
+      fs.writeFileSync(theFilepath, content)
+
+      theCargo = createCargo(STATEMENT_INSERT)
+
+    catch err
+      console.log "failed error:", err
 
     setTimeout(done, 10000)   # wait for cargo.exam
+    return
+
+
+  it "local bulks should be commit to ClickHouse", (done)->
+    rows = []
+    debuglog "[read db] select:", STATEMENT_SELECT
+    getClickHouseClient().query STATEMENT_SELECT, {format:"JSONCompactEachRow"}, (err, result)->
+      if err?
+        done(err)
+        return
+
+      result = result.replace(/\n/g,",").trim().replace(/,$/,'')
+      result = "[ #{result} ]"
+      #console.dir result
+      result = JSON.parse(result)
+
+      debuglog "[read db] result:", result.length
+      #console.dir result, depth:10
+
+      assert result.length is NUM_OF_LINE, "unmatching row length local:#{NUM_OF_LINE}, remote:#{result.length}"
+      result.sort (a, b)-> return a[1] - b[1]
+
+      for row, i in result
+        assert row[1] is i, "unmatching field 1 "
+        assert row[2] is "local-bulk" , "unmatching field 2 "
+
+      done()
+      return
+    return
+
+  it "local bulks should be cleaned", (done)->
+    assert fs.existsSync(theFilepath) is false, "local bulks should be cleaned:#{theFilepath}"
+    done()
     return
 
   return

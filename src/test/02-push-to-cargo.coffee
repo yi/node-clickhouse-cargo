@@ -1,4 +1,10 @@
 {createCargo, isInited} = require "../"
+debuglog = require("debug")("chcargo:test:02")
+{
+  createCargo
+  isInited
+  getClickHouseClient
+} = require "../"
 assert = require ("assert")
 fs = require "fs"
 
@@ -60,7 +66,7 @@ describe "push log to cargo", ->
     contentInHD = fs.readFileSync(theFilepath, 'utf8')
     contentInHDArr =  contentInHD.split(/\r|\n|\r\n/)
 
-    console.log "[exam hd content] contentInHDArr:", contentInHDArr.length
+    debuglog "[exam hd content] contentInHDArr:", contentInHDArr.length
     assert contentInHDArr.length is NUM_OF_LINE, "unmatching output length"
 
     for line, i in contentInHDArr

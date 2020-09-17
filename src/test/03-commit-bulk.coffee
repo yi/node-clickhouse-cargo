@@ -49,7 +49,7 @@ describe "commit bulk", ->
     debuglog "[after] query:", STATEMENT_DROP_TABLE
     getClickHouseClient().query STATEMENT_DROP_TABLE, (err)->
       done(err)
-      process.exit() if not err?
+      #process.exit() if not err?
       return
     return
 

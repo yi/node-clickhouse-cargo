@@ -74,8 +74,7 @@ class Cargo
 
   # routine to exame each bulk belongs to this cargo
   exam : ()->
-    debuglog "#{@} [exam]"
-
+    #debuglog "#{@} [exam]"
     if @curBulk
       if @curBulk.isEmpty()
         # lazy: keep ttl when bulk is empty
