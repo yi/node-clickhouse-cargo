@@ -8,6 +8,8 @@ Bulk = require "./bulk"
 
 FOLDER_PREFIX = "cargo-"
 
+NOOP = -> return
+
 class Cargo
   #toString : -> "[Cargo #{@id}@#{@workingPath}]"
   toString : -> "[Cargo #{@id}]"
@@ -24,7 +26,7 @@ class Cargo
 
     if fs.existsSync(@workingPath)
       # directory already exists
-      assert fs.statSync(@workingPath).isDirectory(), "#{PathToCargoFile} is not a directory"
+      assert fs.statSync(@workingPath).isDirectory(), "#{@workingPath} is not a directory"
       @restoreExistingFiles() unless skipRestoration
     else
       # create directory
@@ -37,8 +39,29 @@ class Cargo
   setBulkTTL : (val)-> @bulkTTL = val
 
   restoreExistingFiles : ->
-    return
+    fs.readdir @workingPath, (err, filenamList)=>
+      #debuglog "[restoreExistingFiles] filenamList:", filenamList
+      if err?
+        throw err
+        return
 
+      return unless Array.isArray(filenamList)
+      filenamList = filenamList.filter (item)-> return item.startsWith(Bulk.FILENAME_PREFIX)
+
+      return unless filenamList.length > 0
+
+      for filename in filenamList
+        pathToFile = path.join(@workingPath, filename)
+        stats = fs.statSync(pathToFile)
+        if stats.size <= 0
+          debuglog "[restoreExistingFiles] remove empty:#{filename}"
+          fs.unlink(pathToFile, NOOP)
+        else
+          debuglog "[restoreExistingFiles] restore existing bulk"
+          @bulks.push(new Bulk(@workingPath, filename.replace(Bulk.FILENAME_PREFIX, "")))
+
+      return
+    return
 
   moveToNextBulk : ->
     debuglog "#{@} [moveToNextBulk]"

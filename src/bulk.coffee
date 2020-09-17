@@ -10,6 +10,8 @@ StaticCountWithProcess = 0
 # cork stream write
 NUM_OF_LINES_TO_CORK = 100
 
+FILENAME_PREFIX = "bulk-"
+
 noop = -> return
 
 toSQLDateString = (date)->
@@ -22,15 +24,21 @@ toSQLDateString = (date)->
     ('00' + date.getUTCSeconds()).slice(-2)
 
 class Bulk
-  toString : -> "[Bulk #{@id}@#{@pathToFile}]"
+  #toString : -> "[Bulk #{@id}@#{@pathToFile}]"
+  toString : -> "[Bulk #{@id}]"
 
-  constructor: (workingPath)->
-    @id = Date.now().toString(36) + "_#{++StaticCountWithProcess}"
-    # when launch as a worker by pm2
-    @id += "_#{cluster.worker.id}" if cluster.isWorker
+  constructor: (workingPath, presetId)->
+    if presetId
+      debuglog "[constructor] Bulk with presetId: #{presetId}"
+      @id = presetId
+      @count = 1  # mark bulk has content when presetId given
+    else
+      @id = Date.now().toString(36) + "_#{++StaticCountWithProcess}"
+      # when launch as a worker by pm2
+      @id += "_#{cluster.worker.id}" if cluster.isWorker
+      @count = 0
 
-    @count = 0
-    @pathToFile = path.join(workingPath, "bulk-#{@id}")
+    @pathToFile = path.join(workingPath,  FILENAME_PREFIX + @id)
 
     @outputStream = fs.createWriteStream(@pathToFile, flags:'a')
     # make sure writableStream is working
@@ -117,6 +125,8 @@ class Bulk
 
   isCommitted : -> return @_committed is true
 
+
+Bulk.FILENAME_PREFIX = FILENAME_PREFIX
 
 
 module.exports = Bulk

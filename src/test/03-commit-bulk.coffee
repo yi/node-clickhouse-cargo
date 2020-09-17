@@ -7,7 +7,7 @@ debuglog = require("debug")("chcargo:test:03")
 assert = require ("assert")
 fs = require "fs"
 
-TABLE_NAME = "cargo_test.unittest03_#{Date.now().toString(36)}"
+TABLE_NAME = "cargo_test.unittest03"
 
 STATEMENT_CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS #{TABLE_NAME}
@@ -18,14 +18,6 @@ CREATE TABLE IF NOT EXISTS #{TABLE_NAME}
 )
 ENGINE = Memory()
 """
-
-#ENGINE = MergeTree()
-#PARTITION BY toYYYYMM(time)
-#ORDER BY (time, step)
-#TTL time + INTERVAL 1 DAY DELETE
-#SETTINGS index_granularity = 8192;
-#"""
-
 STATEMENT_CREATE_TABLE = STATEMENT_CREATE_TABLE.replace(/\n|\r/g, ' ')
 
 STATEMENT_INSERT = "INSERT INTO #{TABLE_NAME}"
