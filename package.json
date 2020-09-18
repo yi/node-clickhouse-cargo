@@ -1,7 +1,7 @@
 {
   "name": "clickhouse-cargo",
   "version": "1.0.0",
-  "description": "Accumulate local inserts and submit to clickhouse in batch jobs with retries on failure.",
+  "description": "Accumulates insert queries and commit them to clickhouse in batch jobs with retries on failure. 这个模块将向 Clickhouse 数据库的高频写入改为低频的批量插入。",
   "main": "index.js",
   "scripts": {
     "watch": "./node_modules/.bin/coffee -o ./lib/ -cw ./src/",
@@ -20,6 +20,7 @@
   },
   "keywords": [
     "clickhouse",
+    "performance",
     "database",
     "db"
   ],
