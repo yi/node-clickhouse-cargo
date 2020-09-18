@@ -67,6 +67,9 @@ for (let i =0, i < NUM_OF_INSERTIONS, i++){
 
 ### Initialization
 
+__Init by code__
+
+
 ```javascript
 clickhouse-cargo.init(options: Options)
 ```
@@ -83,6 +86,12 @@ clickhouse-cargo.init(options: Options)
 | `port`           |          | `8123`        | Server port number.
 | `protocol`       |          | `'http:'`     | `'https:'` or `'http:'`.
 | `dataObjects` <br /> `format` <br />`queryOptions` <br /> `timeout`, <br /> `headers`, <br /> `agent`, <br /> `localAddress`, <br /> `servername`, <br /> etc… |   |   |  Any [@apla/node-clickhouse](https://github.com/apla/node-clickhouse#new-clickhouseoptions-options) options are also available.
+
+
+__Init by the environment variable__
+
+Init by the environment variable is recommended for real-world production.
+Clickhouse-cargo recognises `process.env.CLICKHOUSE_CARGO_PROFILE` and seeks the config json file from `~/.clickhouse-cargo/${process.env.CLICKHOUSE_CARGO_PROFILE}`
 
 
 ### Create a Cargo instanse
