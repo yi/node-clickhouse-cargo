@@ -39,7 +39,7 @@ init = (config)->
 # Create a cargo instance.
 # Cargos are bind to statements. Call create multiple times with the same statement, will result in one shared cargo.
 # @param statement String, sql insert statement
-# @param bulkTTL Int, ttl(in ms) for flush accumlated inserts. default: 30000, min: 1000
+# @param bulkTTL Int, ttl(in ms) for flush accumlated inserts. default: 5000, min: 1000
 createCargo = (statement, bulkTTL)->
   debuglog "[createCargo] statement:#{statement}, bulkTTL:#{bulkTTL}"
   assert  ClickHouseClient, "ClickHouseClient needs to be inited first"
