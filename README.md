@@ -9,7 +9,7 @@ Clickhouse-cargo provides an easy way to batch data insertion to Clickhouse. It 
 
 clickhouse-cargo 适用于分布式的 NodeJS 服务向 Clickhouse 频繁插入数据的应用场景。这个模块将向 Clickhouse 数据库的高频写入改为低频的批量插入。
 
-## How it works / 工作原理
+## How it works
 
  1. The `cargo` instance accepts insert requests submitted by the `push` method and routes these requests to a `bulk`.
  2. The `bulk` writes accumulated `push` in the memory to a local file cache according to the setting of `stream.cork`.
@@ -17,6 +17,7 @@ clickhouse-cargo 适用于分布式的 NodeJS 服务向 Clickhouse 频繁插入�
  4. In case of a Clickhouse commit failure, `bulk` will retry the submission in the next round of inspection cycle until the submission is successful.
  5. In case of the NodeJS process crash. local `bulk` file caches will remain on disk. Thus next time when `clickHouse-cargo` module starts, `cargo` checks the remaining `bulk` cache files, and submit them to Clickhouse again.
 
+## 工作原理
 
  1. `cargo` 实例接受 `push`方法所提交的插入请求，并将请求路由给 `bulk`。
  2. `bulk` 根据 `stream.cork` 的设定，按量将内存中累计的 `push` 写入本地文件缓存。
@@ -24,12 +25,12 @@ clickhouse-cargo 适用于分布式的 NodeJS 服务向 Clickhouse 频繁插入�
  4. 当 Clickhouse 写入失败时，`bulk` 将会在下一轮检查周期中重试提交直到提交成功。
  5. 当本地的 NodeJS 进程奔溃时，都会导致本地的 `bulk` 文件缓存残留。于是下一次启动 `clickHouse-cargo` 模块时, `cargo` 检查到残留的 `bulk` 缓存文件时将再次提交给 Clickhouse。
 
-## Install / 安装方法
+## Install
 ```
 $ npm install clickhouse-cargo
 ```
 
-## Usage / 使用示例
+## Usage
 
 ```javascript
 /*
@@ -62,9 +63,9 @@ for (let i =0, i < NUM_OF_INSERTIONS, i++){
 }
 ```
 
-## API / 接口说明
+## API
 
-### Initialization / 模块初始化
+### Initialization
 
 ```javascript
 clickhouse-cargo.init(options: Options)
@@ -84,7 +85,7 @@ clickhouse-cargo.init(options: Options)
 | `dataObjects` <br /> `format` <br />`queryOptions` <br /> `timeout`, <br /> `headers`, <br /> `agent`, <br /> `localAddress`, <br /> `servername`, <br /> etc… |   |   |  Any [@apla/node-clickhouse](https://github.com/apla/node-clickhouse#new-clickhouseoptions-options) options are also available.
 
 
-### Create a Cargo instanse / 创建Cargo实例
+### Create a Cargo instanse
 
 ```javascript
 /*
@@ -94,7 +95,7 @@ clickhouse-cargo.init(options: Options)
 const cargo = clickhouse-cargo.createCargo(statement, bulkTTL);
 ```
 
-### Insert a row / 插入数据记录
+### Insert a row
 ```javascript
 /*
 Instead of inserting to Clickhouse directly, push row to the cargo. And the cargo will commit accumulated insertions to Clickhouse in batch.
