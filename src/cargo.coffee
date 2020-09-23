@@ -2,6 +2,7 @@ fs = require "fs"
 os = require "os"
 path = require "path"
 crypto = require('crypto')
+cluster = require('cluster')
 assert = require "assert"
 debuglog = require("debug")("chcargo:cargo")
 Bulk = require "./bulk"
@@ -41,6 +42,10 @@ class Cargo
   setBulkTTL : (val)-> @bulkTTL = val
 
   restoreExistingFiles : ->
+    if cluster.isWorker
+      debuglog "[restoreExistingFiles] NOT WORKING when cluster.isWorker"
+      return
+
     debuglog "[restoreExistingFiles] @workingPath:", @workingPath
     fs.readdir @workingPath, (err, filenamList)=>
       if err?
