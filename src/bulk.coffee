@@ -2,6 +2,7 @@ cluster = require('cluster')
 path = require "path"
 fs = require "fs"
 assert = require "assert"
+crypto = require("crypto")
 
 debuglog = require("debug")("chcargo:bulk")
 
@@ -33,9 +34,12 @@ class Bulk
       @id = presetId
       @count = 1  # mark bulk has content when presetId given
     else
-      @id = Date.now().toString(36) + "_#{++StaticCountWithProcess}"
+      @id = Date.now().toString(36) + "_#{++StaticCountWithProcess}_#{crypto.randomBytes(10).toString('hex')}"
+
+      debuglog "[constructor] cluster.worker.id: #{cluster.worker && cluster.worker.id}" if cluster.isWorker
+      # FIXME: pm2 give same worer.id to all workers belongs to one cluster?
       # when launch as a worker by pm2
-      @id += "_#{cluster.worker.id}" if cluster.isWorker
+      # @id += "_#{cluster.worker.id}" if cluster.isWorker
       @count = 0
 
     @pathToFile = path.join(workingPath,  FILENAME_PREFIX + @id)
