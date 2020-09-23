@@ -1,14 +1,15 @@
 {
   "name": "clickhouse-cargo",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Accumulates insert queries and commit them to clickhouse in batch jobs with retries on failure. 这个模块将向 Clickhouse 数据库的高频写入改为低频的批量插入。",
   "main": "lib/index.js",
   "scripts": {
     "watch": "./node_modules/.bin/coffee -o ./lib/ -cw ./src/",
-    "test01": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha --recursive ./lib/test/01-create-cargo.js -R spec",
-    "test02": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha --recursive ./lib/test/02-push-to-cargo.js -R spec",
-    "test03": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha --recursive ./lib/test/03-commit-bulk.js -R spec",
-    "test04": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha --recursive ./lib/test/04-restore-local-bulks.js -R spec",
+    "test01": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/01-create-cargo.js -R spec",
+    "test02": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/02-push-to-cargo.js -R spec",
+    "test03": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/03-commit-bulk.js -R spec",
+    "test04": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/04-restore-local-bulks.js -R spec",
+    "test-temp": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/temp-debug-stream-error.js -R spec",
     "test": "export DISABLED_DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha --recursive ./lib/test -R spec"
   },
   "repository": {

@@ -2,7 +2,6 @@ cluster = require('cluster')
 path = require "path"
 fs = require "fs"
 assert = require "assert"
-crypto = require("crypto")
 
 debuglog = require("debug")("chcargo:bulk")
 
@@ -34,13 +33,12 @@ class Bulk
       @id = presetId
       @count = 1  # mark bulk has content when presetId given
     else
-      @id = Date.now().toString(36) + "_#{++StaticCountWithProcess}_#{crypto.randomBytes(10).toString('hex')}"
-
-      debuglog "[constructor] cluster.worker.id: #{cluster.worker && cluster.worker.id}" if cluster.isWorker
-      # FIXME: pm2 give same worer.id to all workers belongs to one cluster?
+      @id = Date.now().toString(36) + "_#{++StaticCountWithProcess}"
       # when launch as a worker by pm2
-      # @id += "_#{cluster.worker.id}" if cluster.isWorker
+      @id += "_#{cluster.worker.id}" if cluster.isWorker
       @count = 0
+
+    debuglog "[constructor] Bulk id: #{@id}, cluster.worker.id:#{cluster.worker && cluster.worker.id}"
 
     @pathToFile = path.join(workingPath,  FILENAME_PREFIX + @id)
 
@@ -85,11 +83,11 @@ class Bulk
     if @_committing
       debuglog "#{@} [commit] IGNORE is _committing"
       return
+
     assert statement, "missing insert statment"
 
     @_committing = true  #lock
-    debuglog "#{@} [commit] go committing:", statement
-
+    debuglog "#{@} [commit] go committing, count:#{@count}, pathToFile:#{@pathToFile}"
     theOutputStream = @outputStream
 
     theOutputStream.end (err)=>
@@ -98,28 +96,23 @@ class Bulk
         @_committing = false  #unlock
         return
 
-      #dbStream = clichouseClient.query statement, (err)=>
-      dbStream = clichouseClient.query statement, {format:'JSONCompactEachRow'}, (err)=>
-        if err?
-          debuglog "#{@} [commit] FAIL db query. error:", err
-          @_committing = false  #unlock
-          return
+      bulkDataStream = fs.createReadStream(@pathToFile)
 
-        try
-          @_committing = false
-          @_committed = true
-          theOutputStream.destroy()
-          readableStream.destroy()
-          fs.unlink(@pathToFile, NOOP)  # remove the physical file
-          debuglog "#{@} [commit] success"
-        catch err
-          debuglog "#{@} [commit] FAILED error:", err
+      dbStream = clichouseClient.query(statement, {format:'JSONCompactEachRow'})
 
-
+      dbStream.on 'error', (err)=>
+        debuglog "#{@} [commit] FAILED error:", err
+        @_committing = false
         return
 
-      readableStream = fs.createReadStream(@pathToFile)
-      readableStream.pipe(dbStream)
+      dbStream.on 'finish', =>
+        debuglog "#{@} [commit] success dbStream:finish"
+        @_committing = false
+        @_committed = true
+        fs.unlink(@pathToFile, NOOP)  # remove the physical file
+        return
+
+      bulkDataStream.pipe(dbStream)
       return
     return
 

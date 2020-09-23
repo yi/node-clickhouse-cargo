@@ -10,6 +10,8 @@ FOLDER_PREFIX = "cargo-"
 
 NOOP = -> return
 
+MAX_COMMIT_PER_EXAM_ROUTINE = 1
+
 class Cargo
   #toString : -> "[Cargo #{@id}@#{@workingPath}]"
   toString : -> "[Cargo #{@id}]"
@@ -39,8 +41,8 @@ class Cargo
   setBulkTTL : (val)-> @bulkTTL = val
 
   restoreExistingFiles : ->
+    debuglog "[restoreExistingFiles] @workingPath:", @workingPath
     fs.readdir @workingPath, (err, filenamList)=>
-      #debuglog "[restoreExistingFiles] filenamList:", filenamList
       if err?
         throw err
         return
@@ -50,6 +52,8 @@ class Cargo
 
       return unless filenamList.length > 0
 
+      debuglog "[restoreExistingFiles] filenamList(#{filenamList.length})" #, filenamList
+
       for filename in filenamList
         pathToFile = path.join(@workingPath, filename)
         stats = fs.statSync(pathToFile)
@@ -57,8 +61,9 @@ class Cargo
           debuglog "[restoreExistingFiles] remove empty:#{filename}"
           fs.unlink(pathToFile, NOOP)
         else
-          debuglog "[restoreExistingFiles] restore existing bulk"
-          @bulks.push(new Bulk(@workingPath, filename.replace(Bulk.FILENAME_PREFIX, "")))
+          existingBulkId = filename.replace(Bulk.FILENAME_PREFIX, "")
+          debuglog "[restoreExistingFiles] restore existing bulk:", existingBulkId
+          @bulks.push(new Bulk(@workingPath, existingBulkId))
 
       return
     return
@@ -83,13 +88,20 @@ class Cargo
         @moveToNextBulk()
 
     bulksToRemove = []
+
+    @bulks.sort (a, b)-> return (parseInt(a.id, 36) || 0) - (parseInt(b.id, 36) || 0)
+
+    countIssueCommit = 0
+
     for bulk in @bulks
       if bulk.isCommitted()
         bulksToRemove.push(bulk)
       else
-        bulk.commit(@clichouseClient, @statement)
+        if countIssueCommit < MAX_COMMIT_PER_EXAM_ROUTINE
+          bulk.commit(@clichouseClient, @statement)
+          ++countIssueCommit
 
-    debuglog "#{@} [exam], bulks:", @bulks.length, ", bulksToRemove:", bulksToRemove.length
+    debuglog "#{@} [exam], bulks:", @bulks.length, ", bulksToRemove:", bulksToRemove.map((item)-> item.id)
 
     for bulk in bulksToRemove
       pos = @bulks.indexOf(bulk)
