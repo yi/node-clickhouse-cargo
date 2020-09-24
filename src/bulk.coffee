@@ -73,7 +73,7 @@ class Bulk
 
   # set the expiration of this bulk
   expire : (ttl)->
-    debuglog "#{@} [expire] ttl:#{ttl}"
+    #debuglog "#{@} [expire] ttl:#{ttl}"
     ttl = parseInt(ttl) || 0
     ttl = 1000 if ttl < 1000
     @expireAt = Date.now() + ttl

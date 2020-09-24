@@ -6,6 +6,7 @@ cluster = require('cluster')
 assert = require "assert"
 debuglog = require("debug")("chcargo:cargo")
 Bulk = require "./bulk"
+{BonjourElector} = require('followtheleader')
 
 FOLDER_PREFIX = "cargo-"
 
@@ -30,7 +31,21 @@ class Cargo
     if fs.existsSync(@workingPath)
       # directory already exists
       assert fs.statSync(@workingPath).isDirectory(), "#{@workingPath} is not a directory"
-      @restoreExistingFiles() unless skipRestoration
+      unless skipRestoration
+        if cluster.isMaster and Object.keys(cluster.workers).length is 0
+          debuglog "[new Cargo] single process, try restoreExistingFiles"
+          @restoreExistingFiles()
+        else
+          # HERE
+          debuglog "[new Cargo] cluster worker, to elect lead"
+          elector = new BonjourElector(name:@id)
+          elector.on 'leader', =>
+            debuglog "worker:#{cluster.worker.id} is leader, try restoreExistingFiles"
+            return
+          elector.on 'error', (err)=>
+            debuglog "worker:#{cluster.worker.id} ELECTION error:", err
+            return
+
     else
       # create directory
       fs.mkdirSync(@workingPath)
@@ -42,10 +57,6 @@ class Cargo
   setBulkTTL : (val)-> @bulkTTL = val
 
   restoreExistingFiles : ->
-    if cluster.isWorker
-      debuglog "[restoreExistingFiles] NOT WORKING when cluster.isWorker"
-      return
-
     debuglog "[restoreExistingFiles] @workingPath:", @workingPath
     fs.readdir @workingPath, (err, filenamList)=>
       if err?

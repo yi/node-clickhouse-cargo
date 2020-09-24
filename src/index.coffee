@@ -63,9 +63,8 @@ createCargo = (statement, bulkTTL)->
   return cargo
 
 examCargos = ->
-  debuglog "[examCargos]"
+  #debuglog "[examCargos]"
   for statement, cargo of STATEMENT_TO_CARGO
-    # TODO: implment searial async
     cargo.exam()
   return
 
