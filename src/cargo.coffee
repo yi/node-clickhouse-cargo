@@ -6,7 +6,7 @@ cluster = require('cluster')
 assert = require "assert"
 debuglog = require("debug")("chcargo:cargo")
 Bulk = require "./bulk"
-{BonjourElector} = require('followtheleader')
+{electSelfToALeader} = require "./leader_election"
 
 FOLDER_PREFIX = "cargo-"
 
@@ -31,20 +31,26 @@ class Cargo
     if fs.existsSync(@workingPath)
       # directory already exists
       assert fs.statSync(@workingPath).isDirectory(), "#{@workingPath} is not a directory"
-      unless skipRestoration
-        if cluster.isMaster and Object.keys(cluster.workers).length is 0
-          debuglog "[new Cargo] single process, try restoreExistingFiles"
-          @restoreExistingFiles()
-        else
-          # HERE
-          debuglog "[new Cargo] cluster worker, to elect lead"
-          elector = new BonjourElector(name:@id)
-          elector.on 'leader', =>
-            debuglog "worker:#{cluster.worker.id} is leader, try restoreExistingFiles"
-            return
-          elector.on 'error', (err)=>
-            debuglog "worker:#{cluster.worker.id} ELECTION error:", err
-            return
+      electSelfToALeader(@id, @restoreExistingFiles.bind(@)) unless skipRestoration
+        #if cluster.isMaster and Object.keys(cluster.workers).length is 0
+          #debuglog "[new Cargo] single process, try restoreExistingFiles"
+          #@restoreExistingFiles()
+        #else
+          #debuglog "[new Cargo] cluster worker, to elect lead"
+          #elector = new BonjourElector({name:@id, host:'127.0.0.1', port:9888})
+          #elector.on 'leader', =>
+            #debuglog "worker:#{cluster.worker.id} is leader, try restoreExistingFiles"
+            #return
+          #elector.on 'error', (err)=>
+            #debuglog "worker:#{cluster.worker.id} ELECTION error:", err
+            #return
+          #elector.on 'reelection', (err)=>
+            #debuglog "worker:#{cluster.worker.id} require reelection"
+            #return
+          #elector.on 'follower', (err)=>
+            #debuglog "worker:#{cluster.worker.id} is follower"
+            #return
+          #elector.start()
 
     else
       # create directory

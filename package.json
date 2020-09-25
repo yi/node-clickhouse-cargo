@@ -38,6 +38,7 @@
   },
   "dependencies": {
     "@apla/clickhouse": "^1.6.3",
+    "bonjour": "^3.5.0",
     "debug": "^4.1.1",
     "followtheleader": "^2.0.9"
   }
