@@ -17,6 +17,10 @@ clickhouse-cargo 适用于分布式的 NodeJS 服务向 Clickhouse 频繁插入�
  4. In case of a Clickhouse commit failure, `bulk` will retry the submission in the next round of inspection cycle until the submission is successful.
  5. In case of the NodeJS process crash. local `bulk` file caches will remain on disk. Thus next time when `clickHouse-cargo` module starts, `cargo` checks the remaining `bulk` cache files, and submit them to Clickhouse again.
 
+### Cluster mode support
+
+When running in cluster mode (such as [PM2 cluster deployment](https://pm2.keymetrics.io/docs/usage/cluster-mode/) ), all cargo workers will run through an election via udp communication @ 127.0.0.1:17888 to elect a leader worker. Then the leader worker will take care of restoring existing bulks.
+
 ## 工作原理
 
  1. `cargo` 实例接受 `push`方法所提交的插入请求，并将请求路由给 `bulk`。
@@ -24,6 +28,11 @@ clickhouse-cargo 适用于分布式的 NodeJS 服务向 Clickhouse 频繁插入�
  3. `cargo` 定时检查所有在线的 `bulk`, 当 `bulk` 的存活超过 `bulkTTL` 的设定时，将 `bulk` 所对应的本地文件缓存提交到 Clickhouse 服务器。
  4. 当 Clickhouse 写入失败时，`bulk` 将会在下一轮检查周期中重试提交直到提交成功。
  5. 当本地的 NodeJS 进程奔溃时，都会导致本地的 `bulk` 文件缓存残留。于是下一次启动 `clickHouse-cargo` 模块时, `cargo` 检查到残留的 `bulk` 缓存文件时将再次提交给 Clickhouse。
+
+### 支持集群模式
+
+在集群模式下，所有的 cargo woker 将通过UDP通讯选举出一个领头的worker。 接着由这个领头的worker来负责恢复文件残留缓存的工作。
+
 
 ## Install
 ```

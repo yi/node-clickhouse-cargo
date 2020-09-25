@@ -42,17 +42,19 @@ describe "restore-local-bulks", ->
   theFilepath = null
 
   before (done)->
-
-    getClickHouseClient().query(STATEMENT_CREATE_TABLE, done)
-    return
-
-  after (done)->
-    debuglog "[after] query:", STATEMENT_DROP_TABLE
     getClickHouseClient().query STATEMENT_DROP_TABLE, (err)->
-      done(err)
       process.exit() if not err?
+      getClickHouseClient().query(STATEMENT_CREATE_TABLE, done)
       return
     return
+
+  #after (done)->
+    #debuglog "[after] query:", STATEMENT_DROP_TABLE
+    #getClickHouseClient().query STATEMENT_DROP_TABLE, (err)->
+      #done(err)
+      #process.exit() if not err?
+      #return
+    #return
 
   it "prepare local bulks", (done)->
 
@@ -70,7 +72,7 @@ describe "restore-local-bulks", ->
 
       content = ""
       for i in [0...NUM_OF_LINE]
-        arr = [toSQLDateString(new Date), i, "local-bulk"]
+        arr = [toSQLDateString(new Date), i, "test04"]
         content += JSON.stringify(arr) + "\n"
       content = content.substr(0, content.length - 1)
       fs.writeFileSync(theFilepath, content)

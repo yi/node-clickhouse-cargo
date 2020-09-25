@@ -82,17 +82,17 @@ electSelfToALeader = (cargoId, callbak=NOOP)->
     remoteWorkerId = parseInt(remoteWorkerId) || 0
     if remoteWorkerId > cargoLeaderId
       cargoLeaderId = remoteWorkerId
-      debuglog "[udpClient] acknowledage new leader:#{remoteWorkerId}"
+      debuglog "[udpClient] acknowledage new leader:#{remoteWorkerId} for #{cargoId}"
     return
 
   procSend = ->
     ++countSend
     if countSend > MAX_UDP_CONFIRM
       if cargoLeaderId is workerId
-        debuglog "[electSelfToALeader@#{workerId}] is leader"
+        debuglog "[electSelfToALeader@#{workerId}] is leader for #{cargoId}"
         callbak()
       else
-        debuglog "[electSelfToALeader@#{workerId}] is follower"
+        debuglog "[electSelfToALeader@#{workerId}] is follower for #{cargoId}"
       udpClient.close()
     else
       udpClient.send msg, 0, msg.length, SERVICE_PORT, SERVICE_HOST

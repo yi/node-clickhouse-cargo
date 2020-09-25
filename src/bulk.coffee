@@ -29,7 +29,7 @@ class Bulk
 
   constructor: (workingPath, presetId)->
     if presetId
-      debuglog "[constructor] Bulk with presetId: #{presetId}"
+      #debuglog "[constructor] Bulk with presetId: #{presetId}"
       @id = presetId
       @count = 1  # mark bulk has content when presetId given
     else
@@ -38,9 +38,9 @@ class Bulk
       @id += "_#{cluster.worker.id}" if cluster.isWorker
       @count = 0
 
-    debuglog "[constructor] Bulk id: #{@id}, cluster.worker.id:#{cluster.worker && cluster.worker.id}"
 
     @pathToFile = path.join(workingPath,  FILENAME_PREFIX + @id)
+    debuglog "[constructor] Bulk id: #{@id}, cluster.worker.id:#{cluster.worker && cluster.worker.id}, @pathToFile:", @pathToFile
 
     @outputStream = fs.createWriteStream(@pathToFile, flags:'a')
     # make sure writableStream is working

@@ -123,7 +123,7 @@ class Cargo
           bulk.commit(@clichouseClient, @statement)
           ++countIssueCommit
 
-    debuglog "#{@} [exam], bulks:", @bulks.length, ", bulksToRemove:", bulksToRemove.map((item)-> item.id)
+    debuglog("#{@} [exam], bulks:", @bulks.length, ", bulksToRemove:", bulksToRemove.map((item)-> item.id)) if bulksToRemove.length > 0
 
     for bulk in bulksToRemove
       pos = @bulks.indexOf(bulk)
