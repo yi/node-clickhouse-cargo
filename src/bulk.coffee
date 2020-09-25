@@ -86,6 +86,13 @@ class Bulk
 
     assert statement, "missing insert statment"
 
+    # FIXME: quick fix for cluster mode conflicats
+    unless fs.existsSync(@pathToFile)
+      debuglog "#{@} [commit] FIXME cache file already removed.", @pathToFile
+      @_committed = true
+      @outputStream.destroy()
+      return
+
     @_committing = true  #lock
     debuglog "#{@} [commit] go committing, count:#{@count}, pathToFile:#{@pathToFile}"
     theOutputStream = @outputStream
