@@ -5,8 +5,6 @@ dgram = require('dgram')
 CLUSTER_WORKER_ID = if cluster.isMaster then "nocluster" else cluster.worker.id
 debuglog = require("debug")("chcargo:leader_election@#{CLUSTER_WORKER_ID}")
 
-NOOP  = -> return
-
 SERVICE_TYPE = "clickhouse-cargo"
 
 SERVICE_PORT = 17888
@@ -54,7 +52,7 @@ unless cluster.isMaster
     debuglog "[static@#{cluster.worker.id}] UDPEchoSrv bind failed. error", err
 
 # communicate with other cluster worker and to elect a leader worker for the given cargoId
-detectLeaderWorker = (cargoId, callbak=NOOP)->
+detectLeaderWorker = (cargoId, callbak)->
   if cluster.isMaster and Object.keys(cluster.workers).length is 0
     debuglog "[electSelfToALeader] single process leader"
     callbak(null, CLUSTER_WORKER_ID)

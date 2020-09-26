@@ -24,8 +24,17 @@ STATEMENT_INSERT = "INSERT INTO #{TABLE_NAME}"
 
 STATEMENT_DROP_TABLE = "DROP TABLE IF EXISTS #{TABLE_NAME}"
 
+columnValueString = Date.now().toString(36)
+
 #STATEMENT_SELECT = "SELECT * FROM #{TABLE_NAME} LIMIT 10000000"
-STATEMENT_SELECT = "SELECT * FROM #{TABLE_NAME} LIMIT 10000000 FORMAT JSONCompactEachRow "
+STATEMENT_SELECT = "SELECT * FROM #{TABLE_NAME} WHERE pos_id='#{columnValueString}' LIMIT 100000 FORMAT JSONCompactEachRow "
+
+# refer
+INIT_OPTION =
+  host : "localhost"
+  maxTime : 2000
+  maxRows : 100
+  commitInterval : 8000
 
 NUM_OF_LINE = 27891  # NOTE: bulk flushs every 100 lines
 #NUM_OF_LINE = 9  # NOTE: bulk flushs every 100 lines
@@ -34,40 +43,31 @@ describe "commit bulk", ->
   @timeout(60000)
 
   theCargo = null
-  theBulk = null
-  theFilepath = null
 
   before (done)->
-    theCargo = createCargo(STATEMENT_INSERT)
-    theBulk = theCargo.curBulk
-    theFilepath = theBulk.pathToFile
+    debuglog "[before]"
 
-    getClickHouseClient().query(STATEMENT_CREATE_TABLE, done)
-    return
-
-  after (done)->
-    debuglog "[after] query:", STATEMENT_DROP_TABLE
     getClickHouseClient().query STATEMENT_DROP_TABLE, (err)->
-      done(err)
-      #process.exit() if not err?
+      throw(err) if err?
+      getClickHouseClient().query STATEMENT_CREATE_TABLE, (err)->
+        throw(err) if err?
+
+        theCargo = createCargo(STATEMENT_INSERT)
+        fs.unlinkSync(theCargo.pathToCargoFile) if fs.existsSync(theCargo.pathToCargoFile)  # clean up existing log
+        done()
+        return
       return
     return
 
-
   it "push to cargo", (done)->
     for i in [0...NUM_OF_LINE]
-      theCargo.push new Date, i, "string"
+      theCargo.push new Date, i, columnValueString
 
-    setTimeout(done, 10000) # wait file stream flush
+    setTimeout(done, 15000) # wait file stream flush
     return
 
   it "bulk should committed", (done)->
-    assert theBulk.isCommitted(), "the bulk should committed"
-
-    curBulk = theCargo.curBulk
-    assert curBulk isnt theBulk, "previouse bulk should not be the current bulk"
-    assert theCargo.getRetiredBulks().length is 0, "committed bulks should be cleared"
-    assert !fs.existsSync(theFilepath), "local file must be cleared"
+    assert !fs.existsSync(theCargo.pathToCargoFile), "local file must be cleared"
     done()
     return
 
@@ -80,7 +80,6 @@ describe "commit bulk", ->
       if err?
         done(err)
         return
-
 
       result = result.replace(/\n/g,",").trim().replace(/,$/,'')
       result = "[ #{result} ]"
@@ -95,7 +94,7 @@ describe "commit bulk", ->
 
       for row, i in result
         assert row[1] is i, "unmatching field 1 "
-        assert row[2] is "string" , "unmatching field 2 "
+        assert row[2] is columnValueString, "unmatching field 2 "
 
       done()
       return
