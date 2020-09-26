@@ -11,27 +11,25 @@ clickhouse-cargo 适用于分布式的 NodeJS 服务向 Clickhouse 频繁插入�
 
 ## How it works
 
- 1. The `cargo` instance accepts insert requests submitted by the `push` method and routes these requests to a `bulk`.
- 2. The `bulk` writes accumulated `push` in the memory to a local file cache according to the setting of `stream.cork`.
- 3. `cargo` checks all online `bulks` regularly. When a `bulk` exceeds its `bulkTTL`,  it will then commit its local file cache to the Clickhouse server.
- 4. In case of a Clickhouse commit failure, `bulk` will retry the submission in the next round of inspection cycle until the submission is successful.
- 5. In case of the NodeJS process crash. local `bulk` file caches will remain on disk. Thus next time when `clickHouse-cargo` module starts, `cargo` checks the remaining `bulk` cache files, and submit them to Clickhouse again.
+ 1. A `cargo` instance accepts insert requests submitted by the `push` method and keep inserts in-memory.
+ 2. The `cargo` instance periodically flushs in-memory inserts to a file cache, then rotates this file and commits rotations to the Clickhouse server.
+ 3. In case of a Clickhouse commit failure, the cargo will retry the submission in the next round of its routine till the submission is successful.
+ 4. In case of the NodeJS process crash. in-memory inserts will be flushed immediately into the file cache.
 
 ### Cluster mode support
 
-When running in cluster mode (such as [PM2 cluster deployment](https://pm2.keymetrics.io/docs/usage/cluster-mode/) ), all cargo workers will run through an election via udp communication @ 127.0.0.1:17888 to elect a leader worker. Then the leader worker will take care of restoring existing bulks.
+When running in cluster mode (such as [PM2 cluster deployment](https://pm2.keymetrics.io/docs/usage/cluster-mode/) ), all cargo workers will run through an election via udp communication @ 127.0.0.1:17888 to elect a leader worker. Then only the leader worker will carry on with file rotations and commitments.
 
 ## 工作原理
 
- 1. `cargo` 实例接受 `push`方法所提交的插入请求，并将请求路由给 `bulk`。
- 2. `bulk` 根据 `stream.cork` 的设定，按量将内存中累计的 `push` 写入本地文件缓存。
- 3. `cargo` 定时检查所有在线的 `bulk`, 当 `bulk` 的存活超过 `bulkTTL` 的设定时，将 `bulk` 所对应的本地文件缓存提交到 Clickhouse 服务器。
- 4. 当 Clickhouse 写入失败时，`bulk` 将会在下一轮检查周期中重试提交直到提交成功。
- 5. 当本地的 NodeJS 进程奔溃时，都会导致本地的 `bulk` 文件缓存残留。于是下一次启动 `clickHouse-cargo` 模块时, `cargo` 检查到残留的 `bulk` 缓存文件时将再次提交给 Clickhouse。
+ 1. `cargo` 实例接受 `push`方法所提交的插入请求，并将请求临时存放于内存中。
+ 1. `cargo` 周期性地将内存中累积的插入记录写入对应的文件缓存。随后将文件缓存进行滚动，并将滚出结果提交到 Clickhouse 数据库。
+ 4. 当向 Clickhouse 写入失败时，`cargo` 将会在下一轮检查周期中重试提交直到提交成功。
+ 5. 当本地的 NodeJS 进程奔溃时，内存中累积的插入请求会被同步写入对应的文件缓存。
 
 ### 支持集群模式
 
-在集群模式下，所有的 cargo woker 将通过UDP通讯选举出一个领头的worker。 接着由这个领头的worker来负责恢复文件残留缓存的工作。
+在集群模式下，所有的 cargo woker 将通过UDP通讯选举出一个领头的worker。 接着由这个领头的worker来负责文件缓存的滚动和提交到 Clickhouse 数据库。
 
 
 ## Install
@@ -88,7 +86,11 @@ clickhouse-cargo.init(options: Options)
 |                  | required | default       | description
 | :--------------- | :------: | :------------ | :----------
 | `host`           | ✓        |               | Host to connect.
-| `cargoPath`      |          | `${cwd()}/cargo_files`              | Path to local cargo cache
+| `cargoPath`      |          | `${cwd()}/cargo_files`              | Path to local cargo cache.
+| `maxTime`        |          |  1000         | For how long in milliseconds, a cargo will keep in-memory insert buffer before flushing it to file.
+| `maxRows`        |          |  100          | For how many rows a cargo will keep in-memory.
+| `commitInterval` |          |  5000         | Interval(ms) for cargo to commit to ClickHouse.
+| `saveWhenCrash`  |          |  true         | When `false`, cargos will not flushSync in-memory data when node process crashes.
 | `user`           |          |               | Authentication user.
 | `password`       |          |               | Authentication password.
 | `path` (`pathname`) |       | `/`           | Pathname of ClickHouse server.
@@ -110,7 +112,7 @@ Clickhouse-cargo recognises `process.env.CLICKHOUSE_CARGO_PROFILE` and seeks the
 @param statement String, sql insert statement
 @param bulkTTL Int, ttl(in ms) for flush accumlated inserts. default: 5000, min: 1000
 */
-const cargo = clickhouse-cargo.createCargo(statement, bulkTTL);
+const cargo = clickhouse-cargo.createCargo(statement);
 ```
 
 ### Insert a row
