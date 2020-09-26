@@ -2,6 +2,7 @@ fs = require "fs"
 os = require "os"
 path = require "path"
 crypto = require('crypto')
+cluster = require('cluster')
 assert = require "assert"
 #Bulk = require "./bulk"
 {detectLeaderWorker} = require "./leader_election"
@@ -107,16 +108,23 @@ class Cargo
 
   # check if to commit disk file to clickhouse DB
   exam : ->
-    return unless Date.now() > @lastCommitAt + @commitInterval
-    debuglog "[exam] go commit"
+    unless Date.now() > @lastCommitAt + @commitInterval
+      #debuglog "[exam] skip"
+      return
+
+    #debuglog "[exam] go commit"
     @flushToFile (err)=>
       if err?
         debuglog "[exam] ABORT fail to flush. error:", err
         return
 
-      fs.stats @pathToCargoFile, (err, stats)=>
+      fs.stat @pathToCargoFile, (err, stats)=>
         if err?
-          debuglog "[exam] ABORT fail to stats file. error:", err
+          if err.code is 'ENOENT'
+            debuglog "[exam] CANCLE nothing to commit"
+            @lastCommitAt = Date.now()
+          else
+            debuglog "[exam] ABORT fail to stats file. error:", err
           return
 
         unless stats and (stats.size > 0)
