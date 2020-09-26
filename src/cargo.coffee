@@ -128,30 +128,44 @@ class Cargo
         #debuglog "[exam] SKIP tick not reach"
         return
 
-      fs.stat @pathToCargoFile, (err, stats)=>
-        #debuglog "[exam > stat] err:", err,", stats:", stats
+      @rotateFile (err)=>
         if err?
-          if err.code is 'ENOENT'
-            debuglog "[exam] CANCLE nothing to commit"
-            @lastCommitAt = Date.now()
-          else
-            debuglog "[exam] ABORT fail to stats file. error:", err
+          debuglog "[exam > rotateFile] FAILED error:", err
+          return
+        @commitToClickhouseDB()
+        return
+      return
+    return
+
+  rotateFile : (callbak=NOOP)->
+    fs.stat @pathToCargoFile, (err, stats)=>
+      #debuglog "[exam > stat] err:", err,", stats:", stats
+      if err?
+        if err.code is 'ENOENT'
+          debuglog "[rotateFile] SKIP nothing to rotate"
+          @lastCommitAt = Date.now()
+          callbak()
+        else
+          debuglog "[rotateFile] ABORT fail to stats file. error:", err
+          callbak(err)
+        return
+
+      unless stats and (stats.size > 0)
+        debuglog "[rotateFile] SKIP empty file."
+        callbak()
+        return
+
+      # rotate disk file
+      pathToRenameFile = path.join(@pathToCargoFolder, "#{FILENAME_PREFIX}#{@id}.#{Date.now().toString(36) + "_#{++StaticCountWithinProcess}"}.#{CLUSTER_WORKER_ID}#{EXTNAME_UNCOMMITTED}")
+      debuglog "[rotateFile] rotate to #{pathToRenameFile}"
+      fs.rename @pathToCargoFile, pathToRenameFile, (err)=>
+        if err?
+          debuglog "[exam] ABORT fail to rename file to #{pathToRenameFile}. error:", err
+          callbak(err)
           return
 
-        unless stats and (stats.size > 0)
-          debuglog "[exam] ABORT empty file."
-          return
-
-        # rotate disk file
-        pathToRenameFile = path.join(@pathToCargoFolder, "#{FILENAME_PREFIX}#{@id}.#{Date.now().toString(36) + "_#{++StaticCountWithinProcess}"}.#{CLUSTER_WORKER_ID}#{EXTNAME_UNCOMMITTED}")
-        debuglog "[exam] rotate to #{pathToRenameFile}"
-        fs.rename @pathToCargoFile, pathToRenameFile, (err)=>
-          if err?
-            debuglog "[exam] ABORT fail to rename file to #{pathToRenameFile}. error:", err
-            return
-
-          @commitToClickhouseDB()
-          return
+        callbak()
+        #@commitToClickhouseDB()
         return
       return
     return

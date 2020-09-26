@@ -9,9 +9,8 @@ crypto = require('crypto')
 fs = require "fs"
 path = require "path"
 {
-  FILENAME_PREFIX
   toSQLDateString
-} = require "../bulk"
+} = require "../utils"
 
 TABLE_NAME = "cargo_test.unittest04"
 
@@ -28,14 +27,15 @@ STATEMENT_CREATE_TABLE = STATEMENT_CREATE_TABLE.replace(/\n|\r/g, ' ')
 
 STATEMENT_INSERT = "INSERT INTO #{TABLE_NAME}"
 
+columnValueString = Date.now().toString(36)
+
 STATEMENT_DROP_TABLE = "DROP TABLE IF EXISTS #{TABLE_NAME}"
 
-STATEMENT_SELECT = "SELECT * FROM #{TABLE_NAME} LIMIT 10000000 FORMAT JSONCompactEachRow "
+STATEMENT_SELECT = "SELECT * FROM #{TABLE_NAME} WHERE pos_id='#{columnValueString}' LIMIT 100000 FORMAT JSONCompactEachRow "
 
 NUM_OF_LINE = 3396
 
-
-describe "restore-local-bulks", ->
+describe "restore-local-rotations", ->
   @timeout(60000)
 
   theCargo = null
@@ -48,23 +48,17 @@ describe "restore-local-bulks", ->
       return
     return
 
-  it "prepare local bulks", (done)->
+  after -> process.exit(0)
+
+  it "prepare local rotations", (done)->
 
     try
-      PathToCargoFile = path.join(process.cwd(), "cargo_files", "cargo-" + crypto.createHash('md5').update(STATEMENT_INSERT).digest("hex"))
-
-      if fs.existsSync(PathToCargoFile)
-        assert fs.statSync(PathToCargoFile).isDirectory(), "#{PathToCargoFile} is not a directory"
-      else
-        fs.mkdirSync(PathToCargoFile, {recursive:true, mode: 0o755})
-
-      bulkId = FILENAME_PREFIX + Date.now().toString(36) + "_1"
-      theFilepath = path.join(PathToCargoFile, bulkId)
+      theFilepath = path.join(process.cwd(), "cargo_files", "cargo_#{crypto.createHash('md5').update(STATEMENT_INSERT).digest("hex")}.#{Date.now().toString(36)}_unittest.nocluster.uncommitted")
       debuglog "[prepare] theFilepath:", theFilepath
 
       content = ""
       for i in [0...NUM_OF_LINE]
-        arr = [toSQLDateString(new Date), i, "test04"]
+        arr = [toSQLDateString(new Date), i,  columnValueString]
         content += JSON.stringify(arr) + "\n"
       content = content.substr(0, content.length - 1)
       fs.writeFileSync(theFilepath, content)
@@ -74,7 +68,7 @@ describe "restore-local-bulks", ->
     catch err
       console.log "failed error:", err
 
-    setTimeout(done, 10000)   # wait for cargo.exam
+    setTimeout(done, 20000)   # wait for cargo.exam
     return
 
 
@@ -99,7 +93,7 @@ describe "restore-local-bulks", ->
 
       for row, i in result
         assert row[1] is i, "unmatching field 1 "
-        assert row[2] is "local-bulk" , "unmatching field 2 "
+        assert row[2] is  columnValueString, "unmatching field 2 "
 
       done()
       return

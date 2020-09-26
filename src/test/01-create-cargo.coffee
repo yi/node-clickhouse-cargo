@@ -20,6 +20,8 @@ describe "init clickhouse_cargo", ->
     #done()
     #return
 
+  #after -> process.exit(0)
+
   it "auto init when env set", (done)->
     assert isInited(), "should auto init when env set"
     done()

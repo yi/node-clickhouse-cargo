@@ -59,6 +59,8 @@ describe "push log to cargo", ->
       return
     return
 
+  #after -> process.exit(0)
+
   it "push to cargo", (done)->
 
     for i in [0...NUM_OF_LINE]

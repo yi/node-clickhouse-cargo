@@ -26,7 +26,6 @@ STATEMENT_DROP_TABLE = "DROP TABLE IF EXISTS #{TABLE_NAME}"
 
 columnValueString = Date.now().toString(36)
 
-#STATEMENT_SELECT = "SELECT * FROM #{TABLE_NAME} LIMIT 10000000"
 STATEMENT_SELECT = "SELECT * FROM #{TABLE_NAME} WHERE pos_id='#{columnValueString}' LIMIT 100000 FORMAT JSONCompactEachRow "
 
 # refer
@@ -58,6 +57,8 @@ describe "commit bulk", ->
         return
       return
     return
+
+  #after -> process.exit(0)
 
   it "push to cargo", (done)->
     for i in [0...NUM_OF_LINE]
