@@ -24,7 +24,7 @@ MIN_ROWS = 100
 
 DEFAULT_COMMIT_INTERVAL = 5000
 
-StaticCountWithProcess = 0
+StaticCountWithinProcess = 0
 
 class Cargo
   toString : -> "[Cargo #{@id}]"
@@ -74,32 +74,36 @@ class Cargo
     for item, i in arr
       arr[i] = toSQLDateString(item) if (item instanceof Date)
 
-    @cachedRows.push(arr)
+    @cachedRows.push(JSON.stringify(arr))
+    #debuglog "[push] row? #{(@cachedRows.length > @maxRows)}, time? #{(Date.now() > @lastFlushAt + @maxRows)} "
     @flushToFile() if (@cachedRows.length > @maxRows) or (Date.now() > @lastFlushAt + @maxRows)
     return
 
   # flush memory cache to the disk file
+  # @callbak (err, isFlushing:Boolean)
   flushToFile : (callbak=NOOP)->
-    return if @_isFlushing
+    #debuglog("#{@} [flushToFile] @_isFlushing:", @_isFlushing)
+    if @_isFlushing
+      callbak(null, true)
+      return
 
     unless @cachedRows.length > 0
-      debuglog("#{@} [flushToFile] nothint to flush")
+      debuglog("#{@} [flushToFile] nothing to flush")
       @lastFlushAt = Date.now()
       callbak()
       return
 
-    debuglog("#{@} [flushToFile] #{@cachedRows.length} rows")
-
     rowsToFlush = @cachedRows
     @cachedRows = []
+    debuglog("#{@} [flushToFile] #{rowsToFlush.length} rows")
 
     @_isFlushing = true
-    fs.appendFile @pathToCargoFile, rowsToFlush.join("\n"), (err)=>
+    fs.appendFile @pathToCargoFile, rowsToFlush.join("\n")+"\n", (err)=>
       if err?
         debuglog "#{@} [flushToFile] FAILED error:", err
         @cachedRows = rowsToFlush.concat(@cachedRows) # unshift data back
 
-      debuglog "#{@} [flushToFile] SUCCESS"
+      debuglog "#{@} [flushToFile] SUCCESS #{rowsToFlush.length} rows"
       @lastFlushAt = Date.now()
       @_isFlushing = false
       callbak(err)
@@ -108,14 +112,18 @@ class Cargo
 
   # check if to commit disk file to clickhouse DB
   exam : ->
-    unless Date.now() > @lastCommitAt + @commitInterval
-      #debuglog "[exam] skip"
-      return
-
     #debuglog "[exam] go commit"
-    @flushToFile (err)=>
+    @flushToFile (err, isFlushing)=>
       if err?
         debuglog "[exam] ABORT fail to flush. error:", err
+        return
+
+      if isFlushing
+        debuglog "[exam] ABORT isFlushing"
+        return
+
+      unless Date.now() > @lastCommitAt + @commitInterval
+        debuglog "[exam] SKIP tick not reach"
         return
 
       fs.stat @pathToCargoFile, (err, stats)=>

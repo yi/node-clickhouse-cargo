@@ -6,7 +6,7 @@ INIT_OPTION =
   host : "localhost"
   maxTime : 2000
   maxRows : 100
-  commitInterval : 3000
+  commitInterval : 8000
 
 QUERY = "INSERT INTO test.cargo0 FORMAT JSONCompactEachRow"
 QUERY1 = "INSERT INTO test.cargo1 FORMAT JSONCompactEachRow"

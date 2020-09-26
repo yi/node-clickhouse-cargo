@@ -46,7 +46,7 @@ init = (config)->
   CargoOptions.commitInterval = commitInterval if commitInterval > 0
   delete config.commitInterval
 
-  debuglog "[init] CargoOptions:", CargoOptions
+  #debuglog "[init] CargoOptions:", CargoOptions
 
   ClickHouseClient = new ClickHouse(config)
   ClickHouseClient.ping (err)-> throw(err) if err

@@ -28,7 +28,7 @@ STATEMENT_CREATE_TABLE = STATEMENT_CREATE_TABLE.replace(/\n|\r/g, ' ')
 
 STATEMENT_INSERT = "INSERT INTO #{TABLE_NAME}"
 
-STATEMENT_DROP_TABLE = "DROP TABLE #{TABLE_NAME}"
+STATEMENT_DROP_TABLE = "DROP TABLE IF EXISTS #{TABLE_NAME}"
 
 STATEMENT_SELECT = "SELECT * FROM #{TABLE_NAME} LIMIT 10000000 FORMAT JSONCompactEachRow "
 
@@ -43,18 +43,10 @@ describe "restore-local-bulks", ->
 
   before (done)->
     getClickHouseClient().query STATEMENT_DROP_TABLE, (err)->
-      process.exit() if not err?
+      throw(err) if err?
       getClickHouseClient().query(STATEMENT_CREATE_TABLE, done)
       return
     return
-
-  #after (done)->
-    #debuglog "[after] query:", STATEMENT_DROP_TABLE
-    #getClickHouseClient().query STATEMENT_DROP_TABLE, (err)->
-      #done(err)
-      #process.exit() if not err?
-      #return
-    #return
 
   it "prepare local bulks", (done)->
 
