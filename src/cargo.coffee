@@ -2,142 +2,193 @@ fs = require "fs"
 os = require "os"
 path = require "path"
 crypto = require('crypto')
-cluster = require('cluster')
 assert = require "assert"
-debuglog = require("debug")("chcargo:cargo")
-Bulk = require "./bulk"
-{electSelfToALeader} = require "./leader_election"
+#Bulk = require "./bulk"
+{detectLeaderWorker} = require "./leader_election"
+{toSQLDateString} = require "./utils"
+CLUSTER_WORKER_ID = if cluster.isMaster then "nocluster" else cluster.worker.id
+debuglog = require("debug")("chcargo:cargo@#{CLUSTER_WORKER_ID}")
 
-FOLDER_PREFIX = "cargo-"
+FILENAME_PREFIX = "cargo_"
+
+EXTNAME_UNCOMMITTED = ".uncommitted"
 
 NOOP = -> return
 
 MAX_COMMIT_PER_EXAM_ROUTINE = 1
 
+MIN_TIME = 1000
+
+MIN_ROWS = 100
+
+DEFAULT_COMMIT_INTERVAL = 5000
+
+StaticCountWithProcess = 0
+
 class Cargo
-  #toString : -> "[Cargo #{@id}@#{@workingPath}]"
   toString : -> "[Cargo #{@id}]"
 
-  constructor: (@clichouseClient, @statement, @bulkTTL, pathToCargoFile, skipRestoration)->
-    debuglog "[new Cargo] @statement:#{@statement}, @bulkTTL:#{@bulkTTL}"
-    #@id = Date.now().toString(36)
+  # @param ClickHouse clichouseClient
+  # @param SQLInsertString statement
+  # @param Object options:
+  #                     .pathToCargoFolder
+  #                     .maxTime
+  #                     .maxRows
+  #                     .commitInterval
+  constructor: (@clichouseClient, @statement, options={})->
+    @maxTime = parseInt(options.maxTime) || MIN_TIME
+    @maxTime = MIN_TIME if @maxTime < MIN_TIME
+
+    @maxRows = parseInt(options.maxRows) || MIN_ROWS
+    @maxRows = MIN_ROWS if @maxRows < 1
+
+    @commitInterval = parseInt(options.commitInterval) || DEFAULT_COMMIT_INTERVAL
+    @commitInterval = DEFAULT_COMMIT_INTERVAL if @commitInterval < @maxTime
+
     @id = crypto.createHash('md5').update(@statement).digest("hex")
     @count = 0
     @bulks = []
 
-    #@workingPath = fs.mkdtempSync(path.join(os.tmpdir(), FOLDER_PREFIX))
-    @workingPath = path.join(pathToCargoFile, FOLDER_PREFIX + @id)
+    assert options.pathToCargoFolder, "missing options.pathToCargoFolder"
+    @pathToCargoFolder = options.pathToCargoFolder
+    @pathToCargoFile = path.join(@pathToCargoFolder, FILENAME_PREFIX + @id)
 
-    if fs.existsSync(@workingPath)
-      # directory already exists
-      assert fs.statSync(@workingPath).isDirectory(), "#{@workingPath} is not a directory"
-      electSelfToALeader(@id, @restoreExistingFiles.bind(@)) unless skipRestoration
-        #if cluster.isMaster and Object.keys(cluster.workers).length is 0
-          #debuglog "[new Cargo] single process, try restoreExistingFiles"
-          #@restoreExistingFiles()
-        #else
-          #debuglog "[new Cargo] cluster worker, to elect lead"
-          #elector = new BonjourElector({name:@id, host:'127.0.0.1', port:9888})
-          #elector.on 'leader', =>
-            #debuglog "worker:#{cluster.worker.id} is leader, try restoreExistingFiles"
-            #return
-          #elector.on 'error', (err)=>
-            #debuglog "worker:#{cluster.worker.id} ELECTION error:", err
-            #return
-          #elector.on 'reelection', (err)=>
-            #debuglog "worker:#{cluster.worker.id} require reelection"
-            #return
-          #elector.on 'follower', (err)=>
-            #debuglog "worker:#{cluster.worker.id} is follower"
-            #return
-          #elector.start()
+    debuglog "[new Cargo] @statement:#{@statement}, @maxTime:#{@maxTime}, @maxRows:#{@maxRows}, @commitInterval:#{@commitInterval}, @pathToCargoFolder:#{@pathToCargoFolder}"
 
-    else
-      # create directory
-      fs.mkdirSync(@workingPath)
+    # verify cargo can write to the destination folder
+    fs.access @pathToCargoFolder, fs.constants.W_OK, (err)->
+      if err?
+        throw new Error "Cargo not able to write to folder #{@pathToCargoFolder}. Due to #{err}"
+      return
 
-    @curBulk = null
-    @moveToNextBulk()
+    @cachedRows = []
+    @lastFlushAt = Date.now()
+    @lastCommitAt = Date.now()
     return
 
-  setBulkTTL : (val)-> @bulkTTL = val
+  # push row insert into memory cache
+  push : ->
+    arr = Array.from(arguments)
+    assert arr.length > 0, "blank row can not be accepted."
+    for item, i in arr
+      arr[i] = toSQLDateString(item) if (item instanceof Date)
 
-  restoreExistingFiles : ->
-    debuglog "[restoreExistingFiles] @workingPath:", @workingPath
-    fs.readdir @workingPath, (err, filenamList)=>
+    @cachedRows.push(arr)
+    @flushToFile() if (@cachedRows.length > @maxRows) or (Date.now() > @lastFlushAt + @maxRows)
+    return
+
+  # flush memory cache to the disk file
+  flushToFile : (callbak=NOOP)->
+    return if @_isFlushing
+
+    unless @cachedRows.length > 0
+      debuglog("#{@} [flushToFile] nothint to flush")
+      @lastFlushAt = Date.now()
+      callbak()
+      return
+
+    debuglog("#{@} [flushToFile] #{@cachedRows.length} rows")
+
+    rowsToFlush = @cachedRows
+    @cachedRows = []
+
+    @_isFlushing = true
+    fs.appendFile @pathToCargoFile, rowsToFlush.join("\n"), (err)=>
       if err?
-        throw err
-        return
+        debuglog "#{@} [flushToFile] FAILED error:", err
+        @cachedRows = rowsToFlush.concat(@cachedRows) # unshift data back
 
-      return unless Array.isArray(filenamList)
-      filenamList = filenamList.filter (item)-> return item.startsWith(Bulk.FILENAME_PREFIX)
-
-      return unless filenamList.length > 0
-
-      debuglog "[restoreExistingFiles] filenamList(#{filenamList.length})" #, filenamList
-
-      for filename in filenamList
-        pathToFile = path.join(@workingPath, filename)
-        stats = fs.statSync(pathToFile)
-        if stats.size <= 0
-          debuglog "[restoreExistingFiles] remove empty:#{filename}"
-          fs.unlink(pathToFile, NOOP)
-        else
-          existingBulkId = filename.replace(Bulk.FILENAME_PREFIX, "")
-          debuglog "[restoreExistingFiles] restore existing bulk:", existingBulkId
-          @bulks.push(new Bulk(@workingPath, existingBulkId))
-
+      debuglog "#{@} [flushToFile] SUCCESS"
+      @lastFlushAt = Date.now()
+      @_isFlushing = false
+      callbak(err)
       return
     return
 
-  moveToNextBulk : ->
-    debuglog "#{@} [moveToNextBulk]"
-    if @curBulk
-      @bulks.push(@curBulk)
+  # check if to commit disk file to clickhouse DB
+  exam : ->
+    return unless Date.now() > @lastCommitAt + @commitInterval
+    debuglog "[exam] go commit"
+    @flushToFile (err)=>
+      if err?
+        debuglog "[exam] ABORT fail to flush. error:", err
+        return
 
-    @curBulk = new Bulk(@workingPath)
-    @curBulk.expire(@bulkTTL)
+      fs.stats @pathToCargoFile, (err, stats)=>
+        if err?
+          debuglog "[exam] ABORT fail to stats file. error:", err
+          return
+
+        unless stats and (stats.size > 0)
+          debuglog "[exam] ABORT empty file."
+          return
+
+        # rotate disk file
+        pathToRenameFile = path.join(@pathToCargoFolder, "#{FILENAME_PREFIX}#{@id}.#{Date.now().toString(36) + "_#{++StaticCountWithinProcess}"}.#{CLUSTER_WORKER_ID}#{EXTNAME_UNCOMMITTED}")
+        fs.rename @pathToCargoFile, pathToRenameFile, (err)=>
+          if err?
+            debuglog "[exam] ABORT fail to rename file to #{pathToRenameFile}. error:", err
+            return
+
+          @commitToClickhouseDB()
+          return
+        return
+      return
     return
 
-  # routine to exame each bulk belongs to this cargo
-  exam : ()->
-    #debuglog "#{@} [exam]"
-    if @curBulk
-      if @curBulk.isEmpty()
-        # lazy: keep ttl when bulk is empty
-        @curBulk.expire(@bulkTTL)
-      else if @curBulk.isExpired()
-        @moveToNextBulk()
+  # commit local rotated files to remote ClickHouse DB
+  commitToClickhouseDB : ->
+    unless @_isCommiting
+      debuglog "[commitToClickhouseDB] SKIP is committing"
+      return
 
-    bulksToRemove = []
+    # detect leader before every commit because worker might die
+    detectLeaderWorker (err, leadWorkerId)=>
+      if err?
+        debuglog "[commitToClickhouseDB > detectLeaderWorker] FAILED error:", err
+        return
 
-    @bulks.sort (a, b)-> return (parseInt(a.id, 36) || 0) - (parseInt(b.id, 36) || 0)
+      # only one process can commit
+      unless leadWorkerId is CLUSTER_WORKER_ID
+        debuglog "[commitToClickhouseDB] CANCLE leadWorkerId:#{leadWorkerId} unmatch CLUSTER_WORKER_ID:#{CLUSTER_WORKER_ID}"
+        return
 
-    countIssueCommit = 0
+      fs.readdir @pathToCargoFolder, (err, filenamList)=>
+        if err?
+          debuglog "[commitToClickhouseDB > ls] FAILED error:", err
+          return
 
-    for bulk in @bulks
-      if bulk.isCommitted()
-        bulksToRemove.push(bulk)
-      else
-        if countIssueCommit < MAX_COMMIT_PER_EXAM_ROUTINE
-          bulk.commit(@clichouseClient, @statement)
-          ++countIssueCommit
+        return unless Array.isArray(filenamList)
+        filenamList = filenamList.filter (item)->
+          return item.startsWith(FILENAME_PREFIX + @id + '.') and item.endsWith(EXTNAME_UNCOMMITTED)
 
-    debuglog("#{@} [exam], bulks:", @bulks.length, ", bulksToRemove:", bulksToRemove.map((item)-> item.id)) if bulksToRemove.length > 0
+        return unless filenamList.length > 0
+        debuglog "[commitToClickhouseDB] filenamList(#{filenamList.length})", filenamList
 
-    for bulk in bulksToRemove
-      pos = @bulks.indexOf(bulk)
-      debuglog "#{@} [exam] remove bulk: #{bulk.toString()}@#{pos}"
-      @bulks.splice(pos, 1) if pos >= 0
+        filenamList = filenamList.map (item)-> path.join(@pathToCargoFolder, item)
 
+        @_committing = true  #lock
+
+        dbStream = @clichouseClient.query(@statement, {format:'JSONCompactEachRow'})
+
+        dbStream.on 'error', (err)=>
+          debuglog "#{@} [commitToClickhouseDB > DB write] FAILED error:", err
+          @_committing = false
+          return
+
+        dbStream.on 'finish', =>
+          debuglog "#{@} [commitToClickhouseDB] success dbStream:finish"
+          @_committing = false
+          for filepath in filenamList
+            fs.unlink(filepath, NOOP)  # remove the physical file
+          return
+
+        for filepath in filenamList
+          debuglog "[commitToClickhouseDB] commiting:", filepath
+          fs.createReadStream(filepath).pipe(dbStream)
+        return
+      return
     return
-
-  push : ->
-    @curBulk.push(Array.from(arguments))
-    return ++@count
-
-  getRetiredBulks : -> return @bulks.concat()
-
 
 module.exports = Cargo
 

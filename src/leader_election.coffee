@@ -2,7 +2,8 @@
 assert = require "assert"
 cluster = require('cluster')
 dgram = require('dgram')
-debuglog = require("debug")("chcargo:leader_election@#{if cluster.isMaster then "main" else cluster.worker.id}")
+CLUSTER_WORKER_ID = if cluster.isMaster then "nocluster" else cluster.worker.id
+debuglog = require("debug")("chcargo:leader_election@#{CLUSTER_WORKER_ID}")
 
 NOOP  = -> return
 
@@ -53,10 +54,10 @@ unless cluster.isMaster
     debuglog "[static@#{cluster.worker.id}] UDPEchoSrv bind failed. error", err
 
 # communicate with other cluster worker and to elect a leader worker for the given cargoId
-electSelfToALeader = (cargoId, callbak=NOOP)->
+detectLeaderWorker = (cargoId, callbak=NOOP)->
   if cluster.isMaster and Object.keys(cluster.workers).length is 0
     debuglog "[electSelfToALeader] single process leader"
-    callbak()
+    callbak(null, CLUSTER_WORKER_ID)
     return
 
   workerId = cluster.worker.id
@@ -88,23 +89,23 @@ electSelfToALeader = (cargoId, callbak=NOOP)->
   procSend = ->
     ++countSend
     if countSend > MAX_UDP_CONFIRM
-      if cargoLeaderId is workerId
-        debuglog "[electSelfToALeader@#{workerId}] is leader for #{cargoId}"
-        callbak()
-      else
-        debuglog "[electSelfToALeader@#{workerId}] is follower for #{cargoId}"
       udpClient.close()
+      callbak(null, cargoLeaderId)
+      #if cargoLeaderId is workerId
+        #debuglog "[electSelfToALeader@#{workerId}] is leader for #{cargoId}"
+      #else
+        #debuglog "[electSelfToALeader@#{workerId}] is follower for #{cargoId}"
     else
       udpClient.send msg, 0, msg.length, SERVICE_PORT, SERVICE_HOST
       #setTimeout(procSend, Math.random() * 1000 >>> 0)
-      setTimeout(procSend, 1000)
+      setTimeout(procSend, 200)
     return
   procSend()
   return
 
 
 module.exports =
-  electSelfToALeader : electSelfToALeader
+  detectLeaderWorker : detectLeaderWorker
 
 
 

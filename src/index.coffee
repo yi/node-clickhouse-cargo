@@ -57,7 +57,7 @@ createCargo = (statement, bulkTTL)->
     debuglog "[createCargo] reuse cargo:", cargo.toString()
     return cargo
 
-  cargo = new Cargo(ClickHouseClient, statement, bulkTTL, PathToCargoFile)
+  cargo = new Cargo(ClickHouseClient, statement, PathToCargoFile, bulkTTL)
   STATEMENT_TO_CARGO[statement] = cargo
   debuglog "[createCargo] cargo:", cargo.toString()
   return cargo
