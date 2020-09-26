@@ -9,6 +9,7 @@ toSQLDateString = (date)->
     ('00' + date.getUTCMinutes()).slice(-2) + ':' +
     ('00' + date.getUTCSeconds()).slice(-2)
 
+
 module.exports =
   toSQLDateString : toSQLDateString
 

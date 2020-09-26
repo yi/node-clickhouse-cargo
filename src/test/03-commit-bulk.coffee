@@ -40,7 +40,7 @@ NUM_OF_LINE = 27891  # NOTE: bulk flushs every 100 lines
 #NUM_OF_LINE = 9  # NOTE: bulk flushs every 100 lines
 
 describe "commit bulk", ->
-  @timeout(60000)
+  @timeout(30000)
 
   theCargo = null
 

@@ -3,8 +3,10 @@ os = require "os"
 path = require "path"
 crypto = require('crypto')
 cluster = require('cluster')
+{ pipeline } = require('stream')
 assert = require "assert"
-#Bulk = require "./bulk"
+#CombinedStream = require('combined-stream')
+MultiStream = require('multistream')
 {detectLeaderWorker} = require "./leader_election"
 {toSQLDateString} = require "./utils"
 CLUSTER_WORKER_ID = if cluster.isMaster then "nocluster" else cluster.worker.id
@@ -95,7 +97,7 @@ class Cargo
 
     rowsToFlush = @cachedRows
     @cachedRows = []
-    debuglog("#{@} [flushToFile] #{rowsToFlush.length} rows")
+    debuglog("#{@} [flushToFile] -> #{rowsToFlush.length} rows")
 
     @_isFlushing = true
     fs.appendFile @pathToCargoFile, rowsToFlush.join("\n")+"\n", (err)=>
@@ -123,7 +125,7 @@ class Cargo
         return
 
       unless Date.now() > @lastCommitAt + @commitInterval
-        debuglog "[exam] SKIP tick not reach"
+        #debuglog "[exam] SKIP tick not reach"
         return
 
       fs.stat @pathToCargoFile, (err, stats)=>
@@ -184,7 +186,7 @@ class Cargo
           return item.startsWith(rotationPrefix) and item.endsWith(EXTNAME_UNCOMMITTED)
 
         return unless filenamList.length > 0
-        debuglog "[commitToClickhouseDB] filenamList(#{filenamList.length})", filenamList
+        debuglog "[commitToClickhouseDB] filenamList(#{filenamList.length})" #, filenamList
 
         filenamList = filenamList.map (item)=> path.join(@pathToCargoFolder, item)
 
@@ -204,9 +206,9 @@ class Cargo
             fs.unlink(filepath, NOOP)  # remove the physical file
           return
 
-        for filepath in filenamList
-          debuglog "[commitToClickhouseDB] commiting:", filepath
-          fs.createReadStream(filepath).pipe(dbStream)
+        combinedStream = new MultiStream( filenamList.map((filepath)->fs.createReadStream(filepath)))
+        #console.dir combinedStream , depth:10
+        combinedStream.pipe(dbStream)
         return
       return
     return
