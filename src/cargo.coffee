@@ -112,6 +112,18 @@ class Cargo
       return
     return
 
+
+  flushSync : ->
+    unless @cachedRows.length > 0
+      debuglog "#{@} [flushSync] nothing to flush"
+      return
+
+    rowsToFlush = @cachedRows
+    @cachedRows = []
+    debuglog("#{@} [flushSync] #{rowsToFlush.length} rows")
+    fs.appendFileSync(@pathToCargoFile, rowsToFlush.join("\n")+"\n")
+    return
+
   # check if to commit disk file to clickhouse DB
   exam : ->
     #debuglog "[exam] go commit"
@@ -128,11 +140,28 @@ class Cargo
         #debuglog "[exam] SKIP tick not reach"
         return
 
-      @rotateFile (err)=>
+      # detect leader before every commit because worker might die
+      detectLeaderWorker @id, (err, leadWorkerId)=>
         if err?
-          debuglog "[exam > rotateFile] FAILED error:", err
+          debuglog "[exam > detectLeaderWorker] FAILED error:", err
           return
-        @commitToClickhouseDB()
+
+        # only one process can commit
+        unless leadWorkerId is CLUSTER_WORKER_ID
+          debuglog "[exam] CANCLE NOT leadWorkerId:#{leadWorkerId}"
+          # non-leader skip 10 commit rounds
+          @lastCommitAt = Date.now() + @commitInterval * 10
+          return
+
+        debuglog "[exam] LEAD COMMIT"
+
+        @rotateFile (err)=>
+          if err?
+            debuglog "[exam > rotateFile] FAILED error:", err
+            return
+          @commitToClickhouseDB()
+          @lastCommitAt = Date.now()
+          return
         return
       return
     return
@@ -143,7 +172,6 @@ class Cargo
       if err?
         if err.code is 'ENOENT'
           debuglog "[rotateFile] SKIP nothing to rotate"
-          @lastCommitAt = Date.now()
           callbak()
         else
           debuglog "[rotateFile] ABORT fail to stats file. error:", err
@@ -165,7 +193,6 @@ class Cargo
           return
 
         callbak()
-        #@commitToClickhouseDB()
         return
       return
     return
@@ -177,53 +204,54 @@ class Cargo
       return
 
     # detect leader before every commit because worker might die
-    detectLeaderWorker @id, (err, leadWorkerId)=>
-      debuglog "[commitToClickhouseDB > detectLeaderWorker] err:", err, ", leadWorkerId:", leadWorkerId
+    #detectLeaderWorker @id, (err, leadWorkerId)=>
+      ##debuglog "[commitToClickhouseDB > detectLeaderWorker] err:", err, ", leadWorkerId:", leadWorkerId
+      #if err?
+        #debuglog "[commitToClickhouseDB > detectLeaderWorker] FAILED error:", err
+        #return
+
+      ## only one process can commit
+      #unless leadWorkerId is CLUSTER_WORKER_ID
+        #debuglog "[commitToClickhouseDB] CANCLE NOT leadWorkerId:#{leadWorkerId}"
+        #return
+
+      #debuglog "[commitToClickhouseDB] LEAD COMMIT"
+
+    fs.readdir @pathToCargoFolder, (err, filenamList)=>
+      #debuglog "[commitToClickhouseDB > readdir] err:", err, ", filenamList:", filenamList
       if err?
-        debuglog "[commitToClickhouseDB > detectLeaderWorker] FAILED error:", err
+        debuglog "[commitToClickhouseDB > ls] FAILED error:", err
         return
 
-      # only one process can commit
-      unless leadWorkerId is CLUSTER_WORKER_ID
-        debuglog "[commitToClickhouseDB] CANCLE leadWorkerId:#{leadWorkerId} unmatch CLUSTER_WORKER_ID:#{CLUSTER_WORKER_ID}"
+      return unless Array.isArray(filenamList)
+      rotationPrefix = FILENAME_PREFIX + @id + '.'
+      filenamList = filenamList.filter (item)->
+        return item.startsWith(rotationPrefix) and item.endsWith(EXTNAME_UNCOMMITTED)
+
+      return unless filenamList.length > 0
+      debuglog "[commitToClickhouseDB] filenamList(#{filenamList.length})" #, filenamList
+
+      filenamList = filenamList.map (item)=> path.join(@pathToCargoFolder, item)
+
+      @_isCommiting = true  #lock
+
+      dbStream = @clichouseClient.query(@statement, {format:'JSONCompactEachRow'})
+
+      dbStream.on 'error', (err)=>
+        debuglog "#{@} [commitToClickhouseDB > DB write] FAILED error:", err
+        @_isCommiting = false
         return
 
-      fs.readdir @pathToCargoFolder, (err, filenamList)=>
-        #debuglog "[commitToClickhouseDB > readdir] err:", err, ", filenamList:", filenamList
-        if err?
-          debuglog "[commitToClickhouseDB > ls] FAILED error:", err
-          return
-
-        return unless Array.isArray(filenamList)
-        rotationPrefix = FILENAME_PREFIX + @id + '.'
-        filenamList = filenamList.filter (item)->
-          return item.startsWith(rotationPrefix) and item.endsWith(EXTNAME_UNCOMMITTED)
-
-        return unless filenamList.length > 0
-        debuglog "[commitToClickhouseDB] filenamList(#{filenamList.length})" #, filenamList
-
-        filenamList = filenamList.map (item)=> path.join(@pathToCargoFolder, item)
-
-        @_isCommiting = true  #lock
-
-        dbStream = @clichouseClient.query(@statement, {format:'JSONCompactEachRow'})
-
-        dbStream.on 'error', (err)=>
-          debuglog "#{@} [commitToClickhouseDB > DB write] FAILED error:", err
-          @_isCommiting = false
-          return
-
-        dbStream.on 'finish', =>
-          debuglog "#{@} [commitToClickhouseDB] success dbStream:finish"
-          @_isCommiting = false
-          for filepath in filenamList
-            fs.unlink(filepath, NOOP)  # remove the physical file
-          return
-
-        combinedStream = new MultiStream( filenamList.map((filepath)->fs.createReadStream(filepath)))
-        #console.dir combinedStream , depth:10
-        combinedStream.pipe(dbStream)
+      dbStream.on 'finish', =>
+        debuglog "#{@} [commitToClickhouseDB] success dbStream:finish"
+        @_isCommiting = false
+        for filepath in filenamList
+          fs.unlink(filepath, NOOP)  # remove the physical file
         return
+
+      combinedStream = new MultiStream( filenamList.map((filepath)->fs.createReadStream(filepath)))
+      #console.dir combinedStream , depth:10
+      combinedStream.pipe(dbStream)
       return
     return
 

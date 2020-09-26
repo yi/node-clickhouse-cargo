@@ -1,10 +1,13 @@
 
-debuglog = require("debug")("chcargo:index")
 ClickHouse = require('@apla/clickhouse')
 assert = require "assert"
 path = require "path"
 os = require "os"
 fs = require "fs"
+cluster = require('cluster')
+CLUSTER_WORKER_ID = if cluster.isMaster then "nocluster" else cluster.worker.id
+debuglog = require("debug")("chcargo:index@#{CLUSTER_WORKER_ID}")
+
 Cargo = require "./cargo"
 
 ClickHouseClient = null
@@ -48,8 +51,21 @@ init = (config)->
 
   #debuglog "[init] CargoOptions:", CargoOptions
 
+  isToFlushBeforeCrash = config.saveWhenCrash isnt false
+  delete config.saveWhenCrash
+
   ClickHouseClient = new ClickHouse(config)
   ClickHouseClient.ping (err)-> throw(err) if err
+
+  if isToFlushBeforeCrash
+    # flush in-memroy data when process crash
+    process.on 'uncaughtException', (err)->
+      debuglog "⚠️⚠️⚠️  [flushSyncInMemoryCargo] ⚠️⚠️⚠️  "
+      for statement, cargo of STATEMENT_TO_CARGO
+        cargo.flushSync()
+      throw err
+      return
+
   return
 
 # Create a cargo instance.
@@ -94,6 +110,7 @@ if process.env.CLICKHOUSE_CARGO_PROFILE
 
 # self examination routine
 setInterval(examCargos, 1000)
+
 
 module.exports =
   init : init
