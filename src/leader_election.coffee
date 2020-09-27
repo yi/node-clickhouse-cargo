@@ -33,14 +33,15 @@ unless cluster.isMaster
     portCollection[port] = true
     RemoteClientPortByCargoId[cargoId] = portCollection
 
+    #debuglog "[UDPEchoSrv > on msg] cargoId:#{cargoId}, portCollection:", portCollection
     # echo back
     for port of portCollection
       port = parseInt(port)
-      UDPEchoSrv.send(msg, 0, msg.length, port, SERVICE_HOST) if port isnt SERVICE_PORT
+      UDPEchoSrv.send(msg, 0, msg.length, port, SERVICE_HOST, SERVICE_HOST) if port isnt SERVICE_PORT
     return
 
   UDPEchoSrv.on "error", (err)->
-    debuglog "[static] UDPEchoSrv error:", err
+    debuglog "[static] UDP_ERR UDPEchoSrv error:", err
     return
 
   try
@@ -84,18 +85,18 @@ detectLeaderWorker = (cargoId, callbak)->
       debuglog "[udpClient] acknowledage new leader:#{remoteWorkerId} for #{cargoId}"
     return
 
+  udpClient.on "error", (err)->
+    debuglog "[static] UDP_ERR udpClient error:", err
+    return
+
+
   procSend = ->
     ++countSend
     if countSend > MAX_UDP_CONFIRM
       udpClient.close()
       callbak(null, cargoLeaderId)
-      #if cargoLeaderId is workerId
-        #debuglog "[electSelfToALeader@#{workerId}] is leader for #{cargoId}"
-      #else
-        #debuglog "[electSelfToALeader@#{workerId}] is follower for #{cargoId}"
     else
       udpClient.send msg, 0, msg.length, SERVICE_PORT, SERVICE_HOST
-      #setTimeout(procSend, Math.random() * 1000 >>> 0)
       setTimeout(procSend, 200)
     return
   procSend()
