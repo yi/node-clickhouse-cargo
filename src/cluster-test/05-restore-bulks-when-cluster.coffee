@@ -56,12 +56,19 @@ if cluster.isMaster
   clickHouseClient.query STATEMENT_DROP_TABLE, ->
     clickHouseClient.query STATEMENT_CREATE_TABLE, ->
 
-      prepareBulkCachFile(STATEMENT_INSERT, "~batchA")
-      prepareBulkCachFile(STATEMENT_INSERT2, "~batchB")
+      prepareBulkCachFile(STATEMENT_INSERT, "~batchAAA")
+      prepareBulkCachFile(STATEMENT_INSERT2, "~batchBBB")
 
-      # spawn worker
-      for i in [0...8]
-        cluster.fork()
+
+      proc = ->
+        # spawn worker
+        for i in [0...8]
+          cluster.fork()
+        return
+
+      proc()
+
+      setInterval(proc, 20000)
       return
 
 else

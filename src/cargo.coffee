@@ -7,7 +7,7 @@ cluster = require('cluster')
 assert = require "assert"
 #CombinedStream = require('combined-stream')
 MultiStream = require('multistream')
-{detectLeaderWorker} = require "./leader_election"
+{isThisLeader} = require "./leader_election"
 {toSQLDateString} = require "./utils"
 CLUSTER_WORKER_ID = if cluster.isMaster then "nocluster" else cluster.worker.id
 debuglog = require("debug")("chcargo:cargo@#{CLUSTER_WORKER_ID}")
@@ -140,28 +140,20 @@ class Cargo
         #debuglog "[exam] SKIP tick not reach"
         return
 
-      # detect leader before every commit because worker might die
-      detectLeaderWorker @id, (err, leadWorkerId)=>
+      unless isThisLeader()
+        debuglog "[exam] CANCLE NOT leadWorkerId"
+        # non-leader skip 10 commit rounds
+        @lastCommitAt = Date.now() + @commitInterval * 10
+        return
+
+      debuglog "[exam] LEAD COMMIT"
+
+      @rotateFile (err)=>
         if err?
-          debuglog "[exam > detectLeaderWorker] FAILED error:", err
+          debuglog "[exam > rotateFile] FAILED error:", err
           return
-
-        # only one process can commit
-        unless leadWorkerId is CLUSTER_WORKER_ID
-          debuglog "[exam] CANCLE NOT leadWorkerId:#{leadWorkerId}"
-          # non-leader skip 10 commit rounds
-          @lastCommitAt = Date.now() + @commitInterval * 10
-          return
-
-        debuglog "[exam] LEAD COMMIT"
-
-        @rotateFile (err)=>
-          if err?
-            debuglog "[exam > rotateFile] FAILED error:", err
-            return
-          @commitToClickhouseDB()
-          @lastCommitAt = Date.now()
-          return
+        @commitToClickhouseDB()
+        @lastCommitAt = Date.now()
         return
       return
     return

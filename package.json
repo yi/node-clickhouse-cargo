@@ -1,6 +1,6 @@
 {
   "name": "clickhouse-cargo",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Accumulates insert queries and commit them to clickhouse in batch jobs with retries on failure. 这个模块将向 Clickhouse 数据库的高频写入改为低频的批量插入。",
   "main": "lib/index.js",
   "scripts": {
@@ -9,7 +9,7 @@
     "test02": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/02-push-to-cargo.js -R spec",
     "test03": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/03-commit-bulk.js -R spec",
     "test04": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/04-restore-local-bulks.js -R spec",
-    "test05": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground node ./lib/cluster-test/05-restore-bulks-when-cluster.js",
+    "test05": "export DEBUG=chcargo:leader*; CLICKHOUSE_CARGO_PROFILE=playground node ./lib/cluster-test/05-restore-bulks-when-cluster.js",
     "test": "export DISABLED_DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha --recursive ./lib/test -R spec"
   },
   "repository": {

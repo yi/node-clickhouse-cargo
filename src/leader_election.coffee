@@ -17,7 +17,19 @@ MAX_UDP_CONFIRM = 10
 
 RemoteClientPortByCargoId = {}
 
-unless cluster.isMaster
+RemoteClientToPort = {}
+
+
+
+if cluster.isMaster
+  isThisLeader = -> return true
+  getLeaderId = -> return 0
+
+else
+  # when running as a cluster
+  KnownHighestWorkerId = cluster.worker.id
+
+  # setup upd server
   UDPEchoSrv = dgram.createSocket(type:'udp4')
   UDPEchoSrv.on 'message', (msg, rinfo)->
     msg = msg.toString('utf8')
@@ -29,15 +41,15 @@ unless cluster.isMaster
     {port} = rinfo
     #debuglog "[UDPEchoSrv > on msg] workerId:#{workerId}, cargoId:#{cargoId}, port:#{port}"
 
-    portCollection = RemoteClientPortByCargoId[cargoId] || {}
-    portCollection[port] = true
-    RemoteClientPortByCargoId[cargoId] = portCollection
+    RemoteClientToPort[workerId] = port
 
-    #debuglog "[UDPEchoSrv > on msg] cargoId:#{cargoId}, portCollection:", portCollection
+    #debuglog "[UDPEchoSrv > on msg] cargoId:#{cargoId}, RemoteClientToPort:", RemoteClientToPort
     # echo back
-    for port of portCollection
+    for workerId, port of RemoteClientToPort
       port = parseInt(port)
-      UDPEchoSrv.send(msg, 0, msg.length, port, SERVICE_HOST, SERVICE_HOST) if port isnt SERVICE_PORT
+      if port isnt SERVICE_PORT
+        UDPEchoSrv.send(msg, 0, msg.length, port, SERVICE_HOST)
+        #debuglog "[UDPEchoSrv] echo back to worker:#{workerId}@port:#{port}"
     return
 
   UDPEchoSrv.on "error", (err)->
@@ -52,20 +64,7 @@ unless cluster.isMaster
   catch err
     debuglog "[static@#{cluster.worker.id}] UDPEchoSrv bind failed. error", err
 
-# communicate with other cluster worker and to elect a leader worker for the given cargoId
-detectLeaderWorker = (cargoId, callbak)->
-  if cluster.isMaster and Object.keys(cluster.workers).length is 0
-    debuglog "[electSelfToALeader] single process leader"
-    callbak(null, CLUSTER_WORKER_ID)
-    return
-
-  workerId = cluster.worker.id
-  msg = Buffer.from(String(workerId) + "@" + cargoId)
-
-  # broadcast self for a number of times
-  countSend = 0
-  cargoLeaderId = -1
-
+  # setup udp client
   udpClient = dgram.createSocket("udp4")
   udpClient.on "message", (msg)->
     msg = msg.toString('utf8')
@@ -74,38 +73,31 @@ detectLeaderWorker = (cargoId, callbak)->
       return
 
     [remoteWorkerId, remoteCargoId] = msg.toString('utf8').split("@")
-    #debuglog "[udpClient > on msg] workerId:#{remoteWorkerId}, cargoId:#{remoteCargoId}"
-    unless remoteCargoId is cargoId
-      debuglog "[udpClient] ignore non-interested remoteCargoId:#{remoteCargoId} as cargoId:#{cargoId}"
-      return
 
+    #debuglog "[udpClient] on msg remoteWorkerId:#{remoteWorkerId}, remoteCargoId:#{remoteCargoId}"
     remoteWorkerId = parseInt(remoteWorkerId) || 0
-    if remoteWorkerId > cargoLeaderId
-      cargoLeaderId = remoteWorkerId
-      debuglog "[udpClient] acknowledage new leader:#{remoteWorkerId} for #{cargoId}"
+
+    if remoteWorkerId > KnownHighestWorkerId
+      debuglog "[udpClient] acknowledage new leader: #{KnownHighestWorkerId} -> #{remoteWorkerId}"
+      KnownHighestWorkerId = remoteWorkerId
     return
 
-  udpClient.on "error", (err)->
-    debuglog "[static] UDP_ERR udpClient error:", err
-    return
-
+  ClientSentCount = 2
+  msg = Buffer.from("#{cluster.worker.id}@cluster_leader_election")
 
   procSend = ->
-    ++countSend
-    if countSend > MAX_UDP_CONFIRM
-      udpClient.close()
-      callbak(null, cargoLeaderId)
-    else
-      udpClient.send msg, 0, msg.length, SERVICE_PORT, SERVICE_HOST
-      setTimeout(procSend, 200)
+    ClientSentCount *= 2 unless ClientSentCount >= 64
+    udpClient.send msg, 0, msg.length, SERVICE_PORT, SERVICE_HOST
+    setTimeout(procSend, ClientSentCount)
     return
   procSend()
-  return
 
+  isThisLeader = -> return KnownHighestWorkerId is cluster.worker.id
+  getLeaderId = -> return KnownHighestWorkerId
 
 module.exports =
-  detectLeaderWorker : detectLeaderWorker
-
+  isThisLeader : isThisLeader
+  getLeaderId : getLeaderId
 
 
 
