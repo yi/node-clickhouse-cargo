@@ -89,10 +89,19 @@ createCargo = (statement)->
   debuglog "[createCargo] cargo:", cargo.toString()
   return cargo
 
+
 examCargos = ->
+  # sleep
+  await new Promise((resolve)=> setTimeout(resolve, 1000))
+
   #debuglog "[examCargos]"
   for statement, cargo of STATEMENT_TO_CARGO
-    cargo.exam()
+    try
+      await cargo.exam()   # one-by-one
+    catch err
+      debuglog "[examCargos] FAILED error:", err
+
+  examCargos()
   return
 
 ## static init
@@ -109,8 +118,7 @@ if process.env.CLICKHOUSE_CARGO_PROFILE
   init(profileConfig)
 
 # self examination routine
-setInterval(examCargos, 1000)
-
+examCargos()
 
 module.exports =
   init : init

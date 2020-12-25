@@ -1,4 +1,6 @@
 fs = require "fs"
+#fs = require('fs/promises')
+fsAsync = require('fs/promises')
 os = require "os"
 path = require "path"
 crypto = require('crypto')
@@ -6,11 +8,12 @@ cluster = require('cluster')
 { pipeline } = require('stream')
 assert = require "assert"
 #CombinedStream = require('combined-stream')
-MultiStream = require('multistream')
+{ pipeline } = require('stream/promises')
 {isThisLeader} = require "./leader_election"
-{toSQLDateString} = require "./utils"
 CLUSTER_WORKER_ID = if cluster.isMaster then "nocluster" else cluster.worker.id
 debuglog = require("debug")("chcargo:cargo@#{CLUSTER_WORKER_ID}")
+
+require('stream/promises')
 
 FILENAME_PREFIX = "cargo_"
 
@@ -74,7 +77,7 @@ class Cargo
     arr = Array.from(arguments)
     assert arr.length > 0, "blank row can not be accepted."
     for item, i in arr
-      arr[i] = toSQLDateString(item) if (item instanceof Date)
+      arr[i] = Math.round(item.getDate() / 1000)  if (item instanceof Date)
 
     @cachedRows.push(JSON.stringify(arr))
     #debuglog "[push] row? #{(@cachedRows.length > @maxRows)}, time? #{(Date.now() > @lastFlushAt + @maxRows)} "
@@ -82,17 +85,13 @@ class Cargo
     return
 
   # flush memory cache to the disk file
-  # @callbak (err, isFlushing:Boolean)
-  flushToFile : (callbak=NOOP)->
+  flushToFile : ->
     #debuglog("#{@} [flushToFile] @_isFlushing:", @_isFlushing)
-    if @_isFlushing
-      callbak(null, true)
-      return
+    return if @_isFlushing
 
     unless @cachedRows.length > 0
       #debuglog("#{@} [flushToFile] nothing to flush")
       @lastFlushAt = Date.now()
-      callbak()
       return
 
     rowsToFlush = @cachedRows
@@ -100,18 +99,16 @@ class Cargo
     debuglog("#{@} [flushToFile] -> #{rowsToFlush.length} rows")
 
     @_isFlushing = true
-    fs.appendFile @pathToCargoFile, rowsToFlush.join("\n")+"\n", (err)=>
-      if err?
-        debuglog "#{@} [flushToFile] FAILED error:", err
-        @cachedRows = rowsToFlush.concat(@cachedRows) # unshift data back
+    try
+      await fsAsync.appendFile(@pathToCargoFile, rowsToFlush.join("\n")+"\n") (err)=>
+    catch err
+      debuglog "#{@} [flushToFile] FAILED error:", err
+      @cachedRows = rowsToFlush.concat(@cachedRows) # unshift data back
 
-      debuglog "#{@} [flushToFile] SUCCESS #{rowsToFlush.length} rows"
-      @lastFlushAt = Date.now()
-      @_isFlushing = false
-      callbak(err)
-      return
+    debuglog "#{@} [flushToFile] SUCCESS #{rowsToFlush.length} rows"
+    @lastFlushAt = Date.now()
+    @_isFlushing = false
     return
-
 
   flushSync : ->
     unless @cachedRows.length > 0
@@ -126,68 +123,79 @@ class Cargo
 
   # check if to commit disk file to clickhouse DB
   exam : ->
-    #debuglog "[exam] go commit"
-    @flushToFile (err, isFlushing)=>
-      if err?
-        debuglog "[exam] ABORT fail to flush. error:", err
-        return
-
-      if isFlushing
-        debuglog "[exam] ABORT isFlushing"
-        return
-
-      unless Date.now() > @lastCommitAt + @commitInterval
-        #debuglog "[exam] SKIP tick not reach"
-        return
-
-      unless isThisLeader()
-        debuglog "[exam] CANCLE NOT leadWorkerId"
-        # non-leader skip 10 commit rounds
-        @lastCommitAt = Date.now() + @commitInterval * 10
-        return
-
-      debuglog "[exam] LEAD COMMIT"
-
-      @rotateFile (err)=>
-        if err?
-          debuglog "[exam > rotateFile] FAILED error:", err
-          return
-        @commitToClickhouseDB()
-        @lastCommitAt = Date.now()
-        return
+    if @_isExaming
+      debuglog "[exam] SKIP @_isExaming"
       return
+
+    @_isExaming = true  # lock on
+
+    try
+      await @flushToFile()
+    catch err
+      debuglog "[exam] ABORT fail to flush. error:", err
+      @_isExaming = false  # release
+      return
+
+    unless Date.now() > @lastCommitAt + @commitInterval
+      #debuglog "[exam] SKIP tick not reach"
+      @_isExaming = false  # release
+      return
+
+    unless isThisLeader()
+      debuglog "[exam] CANCLE NOT leadWorkerId"
+      # non-leader skip 10 commit rounds
+      @lastCommitAt = Date.now() + @commitInterval * 10
+      @_isExaming = false  # release
+      return
+
+    debuglog "[exam] LEAD COMMIT"
+
+    try
+      await @rotateFile()
+      await @commitToClickhouseDB()
+      @lastCommitAt = Date.now()
+    catch err
+      debuglog "[exam] FAILED to commit. error:", err
+
+    @_isExaming = false  # release
     return
 
-  rotateFile : (callbak=NOOP)->
-    fs.stat @pathToCargoFile, (err, stats)=>
-      #debuglog "[exam > stat] err:", err,", stats:", stats
-      if err?
-        if err.code is 'ENOENT'
-          debuglog "[rotateFile] SKIP nothing to rotate"
-          callbak()
-        else
-          debuglog "[rotateFile] ABORT fail to stats file. error:", err
-          callbak(err)
-        return
+  # prepar all uncommitted local files
+  # @return Boolean, true if there are local uncommits exist
+  rotateFile : ->
+    if @_isFileRotating
+      debuglog "[rotateFile] SKIP @_isFileRotating"
+      return false
 
-      unless stats and (stats.size > 0)
-        debuglog "[rotateFile] SKIP empty file."
-        callbak()
-        return
+    @_isFileRotating = true  # lock on
 
-      # rotate disk file
-      pathToRenameFile = path.join(@pathToCargoFolder, "#{FILENAME_PREFIX}#{@id}.#{Date.now().toString(36) + "_#{++StaticCountWithinProcess}"}.#{CLUSTER_WORKER_ID}#{EXTNAME_UNCOMMITTED}")
-      debuglog "[rotateFile] rotate to #{pathToRenameFile}"
-      fs.rename @pathToCargoFile, pathToRenameFile, (err)=>
-        if err?
-          debuglog "[exam] ABORT fail to rename file to #{pathToRenameFile}. error:", err
-          callbak(err)
-          return
+    try
+      stats = await fsAsync.stat(@pathToCargoFile)
+    catch err
+      if err.code is 'ENOENT'
+        debuglog "[rotateFile] SKIP nothing to rotate"
+      else
+        debuglog "[rotateFile] ABORT fail to stats file. error:", err
+      @_isFileRotating = false # lock released
+      return false
 
-        callbak()
-        return
-      return
-    return
+    #debuglog "[rotateFile > stat] err:", err,", stats:", stats
+    unless stats and (stats.size > 0)
+      debuglog "[rotateFile] SKIP empty file."
+      @_isFileRotating = false # lock released
+      return false
+
+    # rotate disk file
+    pathToRenameFile = path.join(@pathToCargoFolder, "#{FILENAME_PREFIX}#{@id}.#{Date.now().toString(36) + "_#{++StaticCountWithinProcess}"}.#{CLUSTER_WORKER_ID}#{EXTNAME_UNCOMMITTED}")
+    debuglog "[rotateFile] rotate to #{pathToRenameFile}"
+
+    try
+      fsAsync.rename(@pathToCargoFile, pathToRenameFile)
+    catch err
+      debuglog "[rotateFile] ABORT fail to rename file to #{pathToRenameFile}. error:", err
+
+    @_isFileRotating = false
+    return true
 
   # commit local rotated files to remote ClickHouse DB
   commitToClickhouseDB : ->
@@ -195,60 +203,46 @@ class Cargo
       debuglog "[commitToClickhouseDB] SKIP is committing"
       return
 
-    # detect leader before every commit because worker might die
-    #detectLeaderWorker @id, (err, leadWorkerId)=>
-      ##debuglog "[commitToClickhouseDB > detectLeaderWorker] err:", err, ", leadWorkerId:", leadWorkerId
-      #if err?
-        #debuglog "[commitToClickhouseDB > detectLeaderWorker] FAILED error:", err
-        #return
+    @_isCommiting = true  #lock on
 
-      ## only one process can commit
-      #unless leadWorkerId is CLUSTER_WORKER_ID
-        #debuglog "[commitToClickhouseDB] CANCLE NOT leadWorkerId:#{leadWorkerId}"
-        #return
-
-      #debuglog "[commitToClickhouseDB] LEAD COMMIT"
-
-    fs.readdir @pathToCargoFolder, (err, filenamList)=>
+    try
+      filenamList = fsAsync.readdir(@pathToCargoFolder)
+    catch err
       #debuglog "[commitToClickhouseDB > readdir] err:", err, ", filenamList:", filenamList
-      if err?
-        debuglog "[commitToClickhouseDB > ls] FAILED error:", err
-        return
-
-      return unless Array.isArray(filenamList)
-      rotationPrefix = FILENAME_PREFIX + @id + '.'
-      filenamList = filenamList.filter (item)->
-        return item.startsWith(rotationPrefix) and item.endsWith(EXTNAME_UNCOMMITTED)
-
-      return unless filenamList.length > 0
-      debuglog "[commitToClickhouseDB] filenamList(#{filenamList.length})" #, filenamList
-
-      filenamList = filenamList.map (item)=> path.join(@pathToCargoFolder, item)
-
-      @_isCommiting = true  #lock
-
-      dbStream = @clichouseClient.query(@statement, {format:'JSONCompactEachRow'})
-
-      dbStream.on 'error', (err)=>
-        debuglog "#{@} [commitToClickhouseDB > DB write] FAILED error:", err
-        @_isCommiting = false
-        return
-
-      dbStream.on 'finish', =>
-        debuglog "#{@} [commitToClickhouseDB] success dbStream:finish"
-        @_isCommiting = false
-        for filepath in filenamList
-          fs.unlink(filepath, NOOP)  # remove the physical file
-        return
-
-      combinedStream = new MultiStream( filenamList.map((filepath)->fs.createReadStream(filepath)))
-      #console.dir combinedStream , depth:10
-      combinedStream.pipe(dbStream)
+      debuglog "[commitToClickhouseDB > ls] FAILED error:", err
+      @_isCommiting = false  # lock release
       return
+
+    unless Array.isArray(filenamList) and (filenamList.length > 0)
+      @_isCommiting = false  # lock release
+      return
+
+    # filter out non-commits
+    rotationPrefix = FILENAME_PREFIX + @id + '.'
+    filenamList = filenamList.filter (item)->
+      return item.startsWith(rotationPrefix) and item.endsWith(EXTNAME_UNCOMMITTED)
+
+    unless filenamList.length > 0
+      @_isCommiting = false  # lock release
+      return
+
+    debuglog "[commitToClickhouseDB] filenamList(#{filenamList.length})" #, filenamList
+    filenamList = filenamList.map (item)=> path.join(@pathToCargoFolder, item)
+
+    for filepath in filenamList
+      # submit 1 local uncommit to clickhouse
+      debuglog "[commitToClickhouseDB] submit:#{filepath}"
+      try
+        await pipeline(
+          fs.createReadStream(filepath),
+          @clichouseClient.query(@statement, {format:'JSONCompactEachRow'})
+        )
+        await fsAsync.unlink(filepath)  # remove successfully commited local file
+      catch err
+        debuglog "[commitToClickhouseDB] FAIL to commit:#{filepath}, error:", err
+
+    @_isCommiting = false  # lock release
     return
 
 module.exports = Cargo
-
-
-
 
