@@ -3,11 +3,13 @@ debuglog = require("debug")("chcargo:test:02")
 {
   createCargo
   isInited
-  getClickHouseClient
 } = require "../"
 assert = require ("assert")
 fs = require "fs"
+os = require "os"
+path = require "path"
 _ = require "lodash"
+ClickHouse = require('@apla/clickhouse')
 
 TABLE_NAME = "cargo_test.unittest02"
 
@@ -37,6 +39,18 @@ INIT_OPTION =
 
 #NUM_OF_LINE = 80
 NUM_OF_LINE = 429 # NOTE: bulk flushs every 100 lines
+
+getClickHouseClient = ()->
+  profileName = process.env.CLICKHOUSE_CARGO_PROFILE
+  assert profileName, "missing process.env.CLICKHOUSE_CARGO_PROFIL"
+  profileName += ".json" unless path.extname(profileName) is ".json"
+  pathToConfig = path.join(os.homedir(), ".clickhouse-cargo", process.env.profileName + ".json")
+  debuglog "[getClickHouseClient] try auto init from CLICKHOUSE_CARGO_PROFILE"
+  try
+    profileConfig = JSON.parse(fs.readFileSync(pathToConfig))
+  catch err
+    debuglog "[static init] FAILED error:", err
+  return new ClickHouse(profileConfig)
 
 describe "push log to cargo", ->
   @timeout(20000)

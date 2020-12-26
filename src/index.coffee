@@ -1,16 +1,18 @@
 
-ClickHouse = require('@apla/clickhouse')
 assert = require "assert"
 path = require "path"
 os = require "os"
 fs = require "fs"
+http = require ('http')
+https = require('https')
 cluster = require('cluster')
+{ cargoOptionToHttpOption } = require "./utils"
+
 CLUSTER_WORKER_ID = if cluster.isMaster then "nocluster" else cluster.worker.id
 debuglog = require("debug")("chcargo:index@#{CLUSTER_WORKER_ID}")
 
 Cargo = require "./cargo"
 
-ClickHouseClient = null
 STATEMENT_TO_CARGO = {}
 
 CargoOptions = {}
@@ -21,10 +23,18 @@ CargoOptions = {}
 #                     .maxRows
 #                     .commitInterval
 init = (config)->
-  assert ClickHouseClient is null, "ClickHouseClient has already inited"
+  # config could be simply a string of clickhouse server host
+  config = host:config if typeof(config) is "string"
+
   assert config and config.host, "missing host in config"
 
-  config = Object.assign({}, config)  # leave input obj unmodified
+  #config = Object.assign({}, config)  # leave input obj unmodified
+  CargoOptions.host = config.host
+  CargoOptions.port = parseInt(config.port) || 8123
+  CargoOptions.user = config.user || "default"
+  CargoOptions.password = config.password if typeof(config.password) is "string"
+  CargoOptions.vehicle  = if String(config.protocol || '').toLowerCase() is 'https:' then https else http
+  CargoOptions.timeout  = config.timeout if config.timeout > 0 and Number.isInteger(config.timeout)
 
   # prepare disk path
   CargoOptions.pathToCargoFolder = path.resolve(process.cwd(), config.cargoPath || "cargo_files")
@@ -54,8 +64,13 @@ init = (config)->
   isToFlushBeforeCrash = config.saveWhenCrash isnt false
   delete config.saveWhenCrash
 
-  ClickHouseClient = new ClickHouse(config)
-  ClickHouseClient.ping (err)-> throw(err) if err
+  # pin the given ClickHouse server
+  CargoOptions.vehicle.get(cargoOptionToHttpOption(CargoOptions), ((res)->
+    assert res and (res.statusCode is 200), "FAILED to pin ClickHouse server. Server response unexpected status code:#{res and res.statusCode}"
+  )).on 'error', (err)->
+    debuglog "FAILED to pin ClickHouse server, error:", err
+    throw(err)
+    return
 
   if isToFlushBeforeCrash
     # flush in-memroy data when process crash
@@ -73,7 +88,7 @@ init = (config)->
 # @param statement String, sql insert statement
 createCargo = (statement)->
   debuglog "[createCargo] statement:#{statement}"
-  assert  ClickHouseClient, "ClickHouseClient needs to be inited first"
+  assert CargoOptions.host and CargoOptions.vehicle, "ClickHouse-Cargo needs to be inited first"
   statement = String(statement || "").trim()
   assert statement, "statement must not be blank"
 
@@ -84,7 +99,7 @@ createCargo = (statement)->
     debuglog "[createCargo] reuse cargo:", cargo.toString()
     return cargo
 
-  cargo = new Cargo(ClickHouseClient, statement, CargoOptions)
+  cargo = new Cargo(statement, CargoOptions)
   STATEMENT_TO_CARGO[statement] = cargo
   debuglog "[createCargo] cargo:", cargo.toString()
   return cargo
@@ -123,7 +138,7 @@ examCargos()
 module.exports =
   init : init
   createCargo : createCargo
-  isInited : -> return not not ClickHouseClient
-  getClickHouseClient : -> return ClickHouseClient
+  isInited : -> return not not (CargoOptions and CargoOptions.host)
+
 
 

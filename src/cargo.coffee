@@ -1,19 +1,28 @@
 fs = require "fs"
-#fs = require('fs/promises')
-fsAsync = require('fs/promises')
+#fsAsync = require('fs/promises')
 os = require "os"
 path = require "path"
+qs   = require ('querystring')
 crypto = require('crypto')
 cluster = require('cluster')
-{ pipeline } = require('stream')
 assert = require "assert"
+got = require('got')
 #CombinedStream = require('combined-stream')
-{ pipeline } = require('stream/promises')
+stream = require('stream')
+{promisify} = require('util')
 {isThisLeader} = require "./leader_election"
 CLUSTER_WORKER_ID = if cluster.isMaster then "nocluster" else cluster.worker.id
 debuglog = require("debug")("chcargo:cargo@#{CLUSTER_WORKER_ID}")
 
-require('stream/promises')
+pipeline = promisify(stream.pipeline)
+
+# to support node -v < 14
+fsAsync =
+  rename : promisify(fs.rename)
+  unlink : promisify(fs.unlink)
+  readdir : promisify(fs.readdir)
+  appendFile : promisify(fs.appendFile)
+  stat : promisify(fs.stat)
 
 FILENAME_PREFIX = "cargo_"
 
@@ -31,17 +40,18 @@ DEFAULT_COMMIT_INTERVAL = 5000
 
 StaticCountWithinProcess = 0
 
+
+
 class Cargo
   toString : -> "[Cargo #{@id}]"
 
-  # @param ClickHouse clichouseClient
   # @param SQLInsertString statement
   # @param Object options:
   #                     .pathToCargoFolder
   #                     .maxTime
   #                     .maxRows
   #                     .commitInterval
-  constructor: (@clichouseClient, @statement, options={})->
+  constructor: (@statement, options={})->
     @maxTime = parseInt(options.maxTime) || MIN_TIME
     @maxTime = MIN_TIME if @maxTime < MIN_TIME
 
@@ -148,7 +158,7 @@ class Cargo
       @_isExaming = false  # release
       return
 
-    debuglog "[exam] LEAD COMMIT"
+    #debuglog "[exam] LEAD COMMIT"
 
     try
       await @rotateFile()
@@ -190,7 +200,7 @@ class Cargo
     debuglog "[rotateFile] rotate to #{pathToRenameFile}"
 
     try
-      fsAsync.rename(@pathToCargoFile, pathToRenameFile)
+      await fsAsync.rename(@pathToCargoFile, pathToRenameFile)
     catch err
       debuglog "[rotateFile] ABORT fail to rename file to #{pathToRenameFile}. error:", err
 
@@ -229,14 +239,19 @@ class Cargo
     debuglog "[commitToClickhouseDB] filenamList(#{filenamList.length})" #, filenamList
     filenamList = filenamList.map (item)=> path.join(@pathToCargoFolder, item)
 
+    # submit each local uncommit sequentially
     for filepath in filenamList
       # submit 1 local uncommit to clickhouse
-      debuglog "[commitToClickhouseDB] submit:#{filepath}"
+
+      httpPostOptions = cargoOptionToHttpOption(
+        CargoOptions,
+        path: "/?" + qs.stringify({query:@statement, format:'JSONCompactEachRow', 'wait_end_of_query':1 })
+      )
+      debuglog "[commitToClickhouseDB] submit:#{filepath}, httpPostOptions:", httpPostOptions
+
       try
-        await pipeline(
-          fs.createReadStream(filepath),
-          @clichouseClient.query(@statement, {format:'JSONCompactEachRow'})
-        )
+        res = await pipeline( fs.createReadStream(filepath), got.stream.post(httpPostOptions))
+        debuglog "[commitToClickhouseDB] res:#{res}"
         await fsAsync.unlink(filepath)  # remove successfully commited local file
       catch err
         debuglog "[commitToClickhouseDB] FAIL to commit:#{filepath}, error:", err

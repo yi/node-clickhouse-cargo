@@ -8,8 +8,8 @@ INIT_OPTION =
   maxRows : 100
   commitInterval : 8000
 
-QUERY = "INSERT INTO test.cargo0 FORMAT JSONCompactEachRow"
-QUERY1 = "INSERT INTO test.cargo1 FORMAT JSONCompactEachRow"
+QUERY = "INSERT INTO test.cargo0"
+QUERY1 = "INSERT INTO test.cargo1"
 
 describe "init clickhouse_cargo", ->
 

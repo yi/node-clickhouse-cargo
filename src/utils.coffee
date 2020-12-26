@@ -1,4 +1,5 @@
 
+pkg = require "../package.json"
 
 toSQLDateString = (date)->
   #debuglog "[toSQLDateString] date:", date
@@ -10,7 +11,20 @@ toSQLDateString = (date)->
     ('00' + date.getUTCSeconds()).slice(-2)
 
 
+cargoOptionToHttpOption = (cargoOption, mixin)->
+  options =
+    host : cargoOption.host
+    port : cargoOption.port
+    headers :
+      'X-ClickHouse-User' : cargoOption.user
+      'X-ClickHouse-Key'  : cargoOption.password || ''
+      'User-Agent' : "#{pkg.name}/#{pkg.version}"
+
+  return Object.assign(mixin || {}, options)
+
+
+
 module.exports =
   toSQLDateString : toSQLDateString
-
+  cargoOptionToHttpOption : cargoOptionToHttpOption
 
