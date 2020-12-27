@@ -85,15 +85,21 @@ describe "commit bulk", ->
   it "push to cargo", ->
     for i in [0...NUM_OF_LINE]
       theCargo.push(new Date, i, columnValueString)
-      #theCargo.push(Math.round(Date.now() / 1000), i, columnValueString)
 
-    await sleep 20 # wait file stream flush
+    await sleep 10 # wait file stream flush
     return
 
   it "bulk should committed", (done)->
     assert !fs.existsSync(theCargo.pathToCargoFile), "local file must be cleared"
     done()
     return
+
+  #it "push to cargo", ->
+    #for i in [0...NUM_OF_LINE]
+      #theCargo.push(new Date, i, columnValueString)
+
+    #await sleep 10 # wait file stream flush
+    #return
 
   it "records should be written into remote ClickHouse server", (done)->
     rows = []

@@ -1,17 +1,15 @@
 {
   createCargo
   isInited
-  getClickHouseClient
 } = require "../"
 debuglog = require("debug")("chcargo:cluster-test:05")
 assert = require ("assert")
 crypto = require('crypto')
 fs = require "fs"
+os = require "os"
 path = require "path"
 cluster = require('cluster')
-{
-  toSQLDateString
-} = require "../utils"
+ClickHouse = require('@apla/clickhouse')
 
 TABLE_NAME = "cargo_test.unittest05"
 
@@ -28,22 +26,34 @@ STATEMENT_CREATE_TABLE = STATEMENT_CREATE_TABLE.replace(/\n|\r/g, ' ')
 
 columnValueString = Date.now().toString(36)
 
-STATEMENT_INSERT = "INSERT INTO #{TABLE_NAME}"
-
 STATEMENT_DROP_TABLE = "DROP TABLE IF EXISTS #{TABLE_NAME}"
 
 NUM_OF_LINE = 12
 
 STATEMENT_INSERT2 = "insert into #{TABLE_NAME}"
 
-prepareBulkCachFile = (insertStatement, label)->
 
-  theFilepath = path.join(process.cwd(), "cargo_files", "cargo_#{crypto.createHash('md5').update(insertStatement).digest("hex")}.#{Date.now().toString(36)}_unittest.nocluster.uncommitted")
+getClickHouseClient = ()->
+  profileName = process.env.CLICKHOUSE_CARGO_PROFILE
+  assert profileName, "missing process.env.CLICKHOUSE_CARGO_PROFIL"
+  profileName += ".json" unless path.extname(profileName) is ".json"
+  pathToConfig = path.join(os.homedir(), ".clickhouse-cargo", profileName )
+  debuglog "[getClickHouseClient] try auto init from CLICKHOUSE_CARGO_PROFILE from #{pathToConfig}"
+  try
+    profileConfig = JSON.parse(fs.readFileSync(pathToConfig))
+  catch err
+    debuglog "[static init] FAILED error:", err
+  return new ClickHouse(profileConfig)
+
+
+prepareBulkCachFile = (tableName, label)->
+
+  theFilepath = path.join(process.cwd(), "cargo_files", "cargo_#{tableName}.#{Date.now().toString(36)}_unittest.nocluster.uncommitted")
   debuglog "[prepare] theFilepath:", theFilepath
 
   content = ""
   for i in [0...NUM_OF_LINE]
-    arr = [toSQLDateString(new Date), i, label || "cluster-cargo"]
+    arr = [Math.round(Date.now() / 1000), i, label || "cluster-cargo"]
     content += JSON.stringify(arr) + "\n"
   content = content.substr(0, content.length - 1)
   fs.writeFileSync(theFilepath, content)
@@ -56,8 +66,8 @@ if cluster.isMaster
   clickHouseClient.query STATEMENT_DROP_TABLE, ->
     clickHouseClient.query STATEMENT_CREATE_TABLE, ->
 
-      prepareBulkCachFile(STATEMENT_INSERT, "~batchAAA")
-      prepareBulkCachFile(STATEMENT_INSERT2, "~batchBBB")
+      prepareBulkCachFile(TABLE_NAME, "~batchAAA")
+      prepareBulkCachFile(TABLE_NAME, "~batchBBB")
 
 
       proc = ->
@@ -72,9 +82,10 @@ if cluster.isMaster
       return
 
 else
-  statment = not(cluster.worker.id % 2) && STATEMENT_INSERT || STATEMENT_INSERT2
-  debuglog "[isWorker #{cluster.worker.id}] statment:", statment
-  theCargo = createCargo(statment)
+  #statment = not(cluster.worker.id % 2) && STATEMENT_INSERT || STATEMENT_INSERT2
+  debuglog "[isWorker #{cluster.worker.id}]" # statment:", statment
+  #theCargo = createCargo(statment)
+  theCargo = createCargo(TABLE_NAME)
 
   StartCountWithinProcess = 0
 

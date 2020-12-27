@@ -70,7 +70,7 @@ class Cargo extends EventEmitter
     @httpPostOptions = cargoOptionToHttpOption(options, {path: '/?wait_end_of_query=1', method:'POST'})
     @vehicle = options.vehicle
 
-    debuglog "[new Cargo] @statement:#{@statement}, @maxTime:#{@maxTime}, @maxRows:#{@maxRows}, @commitInterval:#{@commitInterval}, @pathToCargoFile:#{@pathToCargoFile}"
+    debuglog "[new Cargo] @tableName:#{@tableName}, @maxTime:#{@maxTime}, @maxRows:#{@maxRows}, @commitInterval:#{@commitInterval}, @pathToCargoFile:#{@pathToCargoFile}"
 
     # verify cargo can write to the destination folder
     fs.access @pathToCargoFolder, fs.constants.W_OK, (err)->
@@ -195,9 +195,12 @@ class Cargo extends EventEmitter
     #debuglog "[exam] LEAD COMMIT"
 
     try
-      await @rotateFile()
-      await @commitToClickhouseDB()
-      @lastCommitAt = Date.now()
+      hasRotation = await @rotateFile()
+      if hasRotation or @countRotation < 1
+        # LAZY: commit only when: 1. has local rotated uncommits, or 2. first time exame to cargo to restore any previous local uncommits
+        @countRotation += Number(hasRotation)
+        await @commitToClickhouseDB()
+        @lastCommitAt = Date.now()
     catch err
       debuglog "[exam #{@tableName}] FAILED to commit. error:", err
     return
@@ -214,10 +217,10 @@ class Cargo extends EventEmitter
     try
       stats = await fsAsync.stat(@pathToCargoFile)
     catch err
-      if err.code is 'ENOENT'
-        debuglog "[rotateFile] SKIP nothing to rotate"
-      else
+      if err.code isnt 'ENOENT'
         debuglog "[rotateFile] ABORT fail to stats file. error:", err
+      #else
+        #debuglog "[rotateFile] SKIP nothing to rotate"
       @_isFileRotating = false # lock released
       return false
 
@@ -241,7 +244,7 @@ class Cargo extends EventEmitter
 
   # commit local rotated files to remote ClickHouse DB
   commitToClickhouseDB : ->
-    debuglog "[commitToClickhouseDB]"
+    #debuglog "[commitToClickhouseDB]"
     if @_isCommiting
       debuglog "[commitToClickhouseDB] SKIP is committing"
       return
