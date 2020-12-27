@@ -84,7 +84,8 @@ describe "commit bulk", ->
 
   it "push to cargo", ->
     for i in [0...NUM_OF_LINE]
-      theCargo.push(Math.round(Date.now() / 1000), i, columnValueString)
+      theCargo.push(new Date, i, columnValueString)
+      #theCargo.push(Math.round(Date.now() / 1000), i, columnValueString)
 
     await sleep 20 # wait file stream flush
     return

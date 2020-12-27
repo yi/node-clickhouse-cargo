@@ -89,7 +89,11 @@ class Cargo extends EventEmitter
     arr = Array.from(arguments)
     assert arr.length > 0, "blank row can not be accepted."
     for item, i in arr
-      arr[i] = Math.round(item.getDate() / 1000)  if (item instanceof Date)
+      if (item instanceof Date)
+        arr[i] = Math.round(item.getTime() / 1000)
+      else if typeof b is "boolean"
+        arr[i] = Number(b)
+
     @cachedRows.push(JSON.stringify(arr))
     return
 
