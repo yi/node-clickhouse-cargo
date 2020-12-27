@@ -52,7 +52,7 @@ ENGINE = Memory()`;
 */
 
 const clickhouse-cargo = require("clickhouse-cargo");
-const STATEMENT_INSERT = `INSERT INTO cargo_test.table_test`;
+const TABLE_NAME = `cargo_test.table_test`;
 const NUM_OF_INSERTIONS = 27891; // NOTE: bulk flushs every 100 lines
 
 // init clickhouse-cargo
@@ -64,7 +64,7 @@ clickhouse-cargo.init({
 });
 
 // insert data
-const theCargo = clickhouse-cargo.createCargo(STATEMENT_INSERT);
+const theCargo = clickhouse-cargo.createCargo(TABLE_NAME);
 for (let i =0, i < NUM_OF_INSERTIONS, i++){
   theCargo.push(new Date(), i, "string");
 }
@@ -93,10 +93,8 @@ clickhouse-cargo.init(options: Options)
 | `saveWhenCrash`  |          |  true         | When `false`, cargos will not flushSync in-memory data when node process crashes.
 | `user`           |          |               | Authentication user.
 | `password`       |          |               | Authentication password.
-| `path` (`pathname`) |       | `/`           | Pathname of ClickHouse server.
 | `port`           |          | `8123`        | Server port number.
 | `protocol`       |          | `'http:'`     | `'https:'` or `'http:'`.
-| `dataObjects` <br /> `format` <br />`queryOptions` <br /> `timeout`, <br /> `headers`, <br /> `agent`, <br /> `localAddress`, <br /> `servername`, <br /> etc… |   |   |  Any [@apla/node-clickhouse](https://github.com/apla/node-clickhouse#new-clickhouseoptions-options) options are also available.
 
 
 __Init by the environment variable__
@@ -109,10 +107,9 @@ Clickhouse-cargo recognises `process.env.CLICKHOUSE_CARGO_PROFILE` and seeks the
 
 ```javascript
 /*
-@param statement String, sql insert statement
-@param bulkTTL Int, ttl(in ms) for flush accumlated inserts. default: 5000, min: 1000
+* @param tableName String, the name of ClickHouse table which data is inserted
 */
-const cargo = clickhouse-cargo.createCargo(statement);
+const cargo = clickhouse-cargo.createCargo(tableName);
 ```
 
 ### Insert a row
