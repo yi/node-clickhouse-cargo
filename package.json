@@ -1,6 +1,6 @@
 {
   "name": "clickhouse-cargo",
-  "version": "2.0.2",
+  "version": "3.0.0",
   "description": "Accumulates insert queries and commit them to clickhouse in batch jobs with retries on failure. 这个模块将向 Clickhouse 数据库的高频写入改为低频的批量插入。",
   "main": "lib/index.js",
   "scripts": {
@@ -34,12 +34,11 @@
   "devDependencies": {
     "coffeescript": "^2.5.1",
     "lodash": "^4.17.20",
+    "@apla/clickhouse": "^1.6.3",
     "mocha": "^8.1.3",
     "nyc": "^15.1.0"
   },
   "dependencies": {
-    "@apla/clickhouse": "^1.6.3",
-    "debug": "^4.1.1",
-    "got": "^11.8.1"
+    "debug": "^4.1.1"
   }
 }

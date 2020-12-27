@@ -4,10 +4,10 @@ path = require "path"
 qs   = require ('querystring')
 cluster = require('cluster')
 assert = require "assert"
-#stream = require('stream')
+EventEmitter = require('events')
 {promisify} = require('util')
 {isThisLeader} = require "./leader_election"
-{ cargoOptionToHttpOption } = require "./utils"
+{cargoOptionToHttpOption} = require "./utils"
 CLUSTER_WORKER_ID = if cluster.isMaster then "nocluster" else cluster.worker.id
 debuglog = require("debug")("chcargo:cargo@#{CLUSTER_WORKER_ID}")
 url = require('url')
@@ -41,7 +41,7 @@ DEFAULT_COMMIT_INTERVAL = 5000
 StaticCountWithinProcess = 0
 
 
-class Cargo
+class Cargo extends EventEmitter
   toString : -> "[Cargo #{@tableName}]"
 
   # @param SQLInsertString tableName
@@ -51,6 +51,7 @@ class Cargo
   #                     .maxRows
   #                     .commitInterval
   constructor: (@tableName, options={})->
+    super()
     @maxTime = parseInt(options.maxTime) || MIN_TIME
     @maxTime = MIN_TIME if @maxTime < MIN_TIME
 
@@ -60,7 +61,8 @@ class Cargo
     @commitInterval = parseInt(options.commitInterval) || DEFAULT_COMMIT_INTERVAL
     @commitInterval = DEFAULT_COMMIT_INTERVAL if @commitInterval < @maxTime
 
-    @statement = "INSERT INTO #{@tableName} FORMAT JSONCompactEachRow\n"
+    #@statement = "INSERT INTO #{@tableName} FORMAT JSONCompactEachRow\n"
+    @statement = "INSERT INTO #{@tableName} FORMAT JSONCompactEachRow "
 
     assert options.pathToCargoFolder, "missing options.pathToCargoFolder"
     @pathToCargoFolder = options.pathToCargoFolder
@@ -103,7 +105,7 @@ class Cargo
       return
 
     unless forced or (@cachedRows.length > @maxRows) or (Date.now() > @lastFlushAt + @maxTime)
-      debuglog("#{@} [flushToFile] SKIP threshold not reach")
+      #debuglog("#{@} [flushToFile] SKIP threshold not reach")
       return
 
     @_isFlushing = true
@@ -135,7 +137,7 @@ class Cargo
     return
 
   uploadCargoFile : (filepath)->
-    debuglog "[uploadCargoFile] filepath:", filepath
+    debuglog "[uploadCargoFile #{@tableName}] filepath:", filepath
     proc = (resolve, reject)=>
       try
         srcStream = fs.createReadStream(filepath)
@@ -147,6 +149,8 @@ class Cargo
         unless res and res.statusCode is 200
           reject(new Error("ClickHouse server response statusCode:#{res and res.statusCode}"))
           return
+
+        #debuglog "[uploadCargoFile] res.headers:", res.headers
         resolve(res)
         return
 
@@ -160,11 +164,8 @@ class Cargo
         req.destroy(new Error('request timeout'))
         return
 
-      req.on 'connect', =>
-        debuglog "[uploadCargoFile : on connect]"
-        req.write(@statement)
-        srcStream.pipe(req)
-        return
+      req.write(@statement)
+      srcStream.pipe(req)
       return
 
     return new Promise(proc)
@@ -178,7 +179,7 @@ class Cargo
       return
 
     unless Date.now() > @lastCommitAt + @commitInterval
-      debuglog "[exam #{@tableName}] SKIP tick not reach"
+      #debuglog "[exam #{@tableName}] SKIP tick not reach"
       return
 
     unless isThisLeader()
@@ -251,7 +252,7 @@ class Cargo
       @_isCommiting = false  # lock release
       return
 
-    debuglog "[commitToClickhouseDB > readdir] filenamList:", filenamList
+    #debuglog "[commitToClickhouseDB > readdir] filenamList:", filenamList
 
     unless Array.isArray(filenamList) and (filenamList.length > 0)
       @_isCommiting = false  # lock release
@@ -266,29 +267,19 @@ class Cargo
       @_isCommiting = false  # lock release
       return
 
-    debuglog "[commitToClickhouseDB] 3 filenamList(#{filenamList.length})" #, filenamList
+    debuglog "[commitToClickhouseDB] filenamList(#{filenamList.length})" #, filenamList
     filenamList = filenamList.map (item)=> path.join(@pathToCargoFolder, item)
 
     # submit each local uncommit sequentially
     for filepath in filenamList
-      # submit 1 local uncommit to clickhouse
-      #httpPostOptions = Object.assign({}, @httpPostOptions,
-        #path: "/?" + qs.stringify({query:@statement, 'wait_end_of_query':1 })
-      #)
-      #submitUrl = url.format(@httpPostOptions)
-
-      #debuglog "[commitToClickhouseDB] submit:#{filepath}, submitUrl:#{submitUrl}, httpPostOptions:", httpPostOptions
-
       try
-        #res = await pipeline(fs.createReadStream(filepath), got.stream.post(httpPostOptions))
         res = await @uploadCargoFile(filepath)
-        debuglog "[commitToClickhouseDB] res:#{res}"
+        debuglog "[commitToClickhouseDB] res.headers:", res.headers
         await fsAsync.unlink(filepath)  # remove successfully commited local file
       catch err
         debuglog "[commitToClickhouseDB] FAIL to commit:#{filepath}, error:", err
-
-      @_isCommiting = false  # lock release
-      return
+        err.filepath = filepath
+        @emit 'error', err
 
     @_isCommiting = false  # lock release
     return

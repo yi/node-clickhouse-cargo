@@ -67,6 +67,7 @@ init = (config)->
 
   # pin the given ClickHouse server
   CargoOptions.vehicle.get(cargoOptionToHttpOption(CargoOptions), ((res)->
+    #debuglog "[index] res:", res and res.headers and res.headers['x-clickhouse-summary']
     assert res and (res.statusCode is 200), "FAILED to pin ClickHouse server. Server response unexpected status code:#{res and res.statusCode}"
   )).on 'error', (err)->
     debuglog "FAILED to pin ClickHouse server, error:", err
@@ -108,10 +109,11 @@ examCargos = ->
   # sleep
   await new Promise((resolve)=> setTimeout(resolve, 1000))
 
-  debuglog "[examCargos]"
   for tableName, cargo of TABLE_NAME_TO_CARGO
     try
+      startAt = Date.now()
       await cargo.exam()   # one-by-one
+      debuglog "[examCargos] #{cargo.tableName} takes: #{diff}ms" if (diff = Date.now() - startAt) >  5
     catch err
       debuglog "[examCargos] FAILED error:", err
 

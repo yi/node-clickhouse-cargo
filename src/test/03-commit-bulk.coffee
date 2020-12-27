@@ -7,7 +7,6 @@ debuglog = require("debug")("chcargo:test:03")
 {sleep} = require "../utils"
 assert = require ("assert")
 fs = require "fs"
-fs = require "fs"
 os = require "os"
 path = require "path"
 ClickHouse = require('@apla/clickhouse')
@@ -24,8 +23,6 @@ CREATE TABLE IF NOT EXISTS #{TABLE_NAME}
 ENGINE = Memory()
 """
 STATEMENT_CREATE_TABLE = STATEMENT_CREATE_TABLE.replace(/\n|\r/g, ' ')
-
-STATEMENT_INSERT = "INSERT INTO #{TABLE_NAME}"
 
 STATEMENT_DROP_TABLE = "DROP TABLE IF EXISTS #{TABLE_NAME}"
 
@@ -70,7 +67,13 @@ describe "commit bulk", ->
       clickHouseClient.query STATEMENT_CREATE_TABLE, (err)->
         throw(err) if err?
 
-        theCargo = createCargo(STATEMENT_INSERT)
+        theCargo = createCargo(TABLE_NAME)
+
+        # receive notification when commit failed
+        theCargo.on 'error', (err)->
+          debuglog "[on cargo error] error:", err
+          return
+
         fs.unlinkSync(theCargo.pathToCargoFile) if fs.existsSync(theCargo.pathToCargoFile)  # clean up existing log
         done()
         return
@@ -81,7 +84,7 @@ describe "commit bulk", ->
 
   it "push to cargo", ->
     for i in [0...NUM_OF_LINE]
-      theCargo.push new Date, i, columnValueString
+      theCargo.push(Math.round(Date.now() / 1000), i, columnValueString)
 
     await sleep 20 # wait file stream flush
     return

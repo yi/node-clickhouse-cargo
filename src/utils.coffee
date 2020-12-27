@@ -22,7 +22,6 @@ cargoOptionToHttpOption = (cargoOption, mixin)->
     headers :
       'X-ClickHouse-User' : cargoOption.user
       'X-ClickHouse-Key'  : cargoOption.password || ''
-      #'X-ClickHouse-Format'  : 'JSONCompactEachRow'
       'User-Agent' : "#{pkg.name}/#{pkg.version}"
 
   return Object.assign(mixin || {}, options)
