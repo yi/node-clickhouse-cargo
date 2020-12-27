@@ -24,6 +24,8 @@ fsAsync =
   appendFile : promisify(fs.appendFile)
   stat : promisify(fs.stat)
 
+debuglog "[static init] fsAsync:", fsAsync
+
 FILENAME_PREFIX = "cargo_"
 
 EXTNAME_UNCOMMITTED = ".uncommitted"
@@ -39,7 +41,6 @@ MIN_ROWS = 100
 DEFAULT_COMMIT_INTERVAL = 5000
 
 StaticCountWithinProcess = 0
-
 
 
 class Cargo
@@ -80,6 +81,7 @@ class Cargo
     @cachedRows = []
     @lastFlushAt = Date.now()
     @lastCommitAt = Date.now()
+    @countRotation = 0
     return
 
   # push row insert into memory cache
@@ -91,11 +93,12 @@ class Cargo
 
     @cachedRows.push(JSON.stringify(arr))
     #debuglog "[push] row? #{(@cachedRows.length > @maxRows)}, time? #{(Date.now() > @lastFlushAt + @maxRows)} "
-    @flushToFile() if (@cachedRows.length > @maxRows) or (Date.now() > @lastFlushAt + @maxRows)
+    #@flushToFile() if (@cachedRows.length > @maxRows) or (Date.now() > @lastFlushAt + @maxRows)
     return
 
   # flush memory cache to the disk file
-  flushToFile : ->
+  # @param forced Boolean, is force to flush file
+  flushToFile : (forced)->
     #debuglog("#{@} [flushToFile] @_isFlushing:", @_isFlushing)
     return if @_isFlushing
 
@@ -104,13 +107,18 @@ class Cargo
       @lastFlushAt = Date.now()
       return
 
+    unless forced or (@cachedRows.length > @maxRows) or (Date.now() > @lastFlushAt + @maxTime)
+      debuglog("#{@} [flushToFile] SKIP threshold not reach")
+      return
+
+    @_isFlushing = true
+
     rowsToFlush = @cachedRows
     @cachedRows = []
     debuglog("#{@} [flushToFile] -> #{rowsToFlush.length} rows")
 
-    @_isFlushing = true
     try
-      await fsAsync.appendFile(@pathToCargoFile, rowsToFlush.join("\n")+"\n") (err)=>
+      await fsAsync.appendFile(@pathToCargoFile, rowsToFlush.join("\n")+"\n")
     catch err
       debuglog "#{@} [flushToFile] FAILED error:", err
       @cachedRows = rowsToFlush.concat(@cachedRows) # unshift data back
@@ -133,29 +141,20 @@ class Cargo
 
   # check if to commit disk file to clickhouse DB
   exam : ->
-    if @_isExaming
-      debuglog "[exam] SKIP @_isExaming"
-      return
-
-    @_isExaming = true  # lock on
-
     try
       await @flushToFile()
     catch err
       debuglog "[exam] ABORT fail to flush. error:", err
-      @_isExaming = false  # release
       return
 
     unless Date.now() > @lastCommitAt + @commitInterval
-      #debuglog "[exam] SKIP tick not reach"
-      @_isExaming = false  # release
+      debuglog "[exam] SKIP tick not reach"
       return
 
     unless isThisLeader()
       debuglog "[exam] CANCLE NOT leadWorkerId"
       # non-leader skip 10 commit rounds
       @lastCommitAt = Date.now() + @commitInterval * 10
-      @_isExaming = false  # release
       return
 
     #debuglog "[exam] LEAD COMMIT"

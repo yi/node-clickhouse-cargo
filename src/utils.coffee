@@ -1,5 +1,6 @@
 
 pkg = require "../package.json"
+assert = require "assert"
 
 toSQLDateString = (date)->
   #debuglog "[toSQLDateString] date:", date
@@ -22,9 +23,16 @@ cargoOptionToHttpOption = (cargoOption, mixin)->
 
   return Object.assign(mixin || {}, options)
 
+sleep = (seconds)->
+  console.log "sleep #{seconds} seconds"
+  assert Number.isInteger(seconds) and seconds > 0
+  return new Promise((resolve)=>
+    setTimeout(resolve, seconds * 1000)
+  )
 
 
 module.exports =
   toSQLDateString : toSQLDateString
   cargoOptionToHttpOption : cargoOptionToHttpOption
+  sleep : sleep
 

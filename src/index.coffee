@@ -109,14 +109,14 @@ examCargos = ->
   # sleep
   await new Promise((resolve)=> setTimeout(resolve, 1000))
 
-  #debuglog "[examCargos]"
+  debuglog "[examCargos]"
   for statement, cargo of STATEMENT_TO_CARGO
     try
       await cargo.exam()   # one-by-one
     catch err
       debuglog "[examCargos] FAILED error:", err
 
-  examCargos()
+  await examCargos()
   return
 
 ## static init
@@ -133,7 +133,8 @@ if process.env.CLICKHOUSE_CARGO_PROFILE
   init(profileConfig)
 
 # self examination routine
-examCargos()
+setTimeout((-> await examCargos()), 100)
+# examCargos()
 
 module.exports =
   init : init
