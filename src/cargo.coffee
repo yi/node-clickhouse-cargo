@@ -1,20 +1,18 @@
 fs = require "fs"
-#fsAsync = require('fs/promises')
 os = require "os"
 path = require "path"
 qs   = require ('querystring')
-crypto = require('crypto')
 cluster = require('cluster')
 assert = require "assert"
-got = require('got')
-#CombinedStream = require('combined-stream')
-stream = require('stream')
+#stream = require('stream')
 {promisify} = require('util')
 {isThisLeader} = require "./leader_election"
+{ cargoOptionToHttpOption } = require "./utils"
 CLUSTER_WORKER_ID = if cluster.isMaster then "nocluster" else cluster.worker.id
 debuglog = require("debug")("chcargo:cargo@#{CLUSTER_WORKER_ID}")
+url = require('url')
 
-pipeline = promisify(stream.pipeline)
+#pipeline = promisify(stream.pipeline)
 
 # to support node -v < 14
 fsAsync =
@@ -44,15 +42,15 @@ StaticCountWithinProcess = 0
 
 
 class Cargo
-  toString : -> "[Cargo #{@id}]"
+  toString : -> "[Cargo #{@tableName}]"
 
-  # @param SQLInsertString statement
+  # @param SQLInsertString tableName
   # @param Object options:
   #                     .pathToCargoFolder
   #                     .maxTime
   #                     .maxRows
   #                     .commitInterval
-  constructor: (@statement, options={})->
+  constructor: (@tableName, options={})->
     @maxTime = parseInt(options.maxTime) || MIN_TIME
     @maxTime = MIN_TIME if @maxTime < MIN_TIME
 
@@ -62,13 +60,13 @@ class Cargo
     @commitInterval = parseInt(options.commitInterval) || DEFAULT_COMMIT_INTERVAL
     @commitInterval = DEFAULT_COMMIT_INTERVAL if @commitInterval < @maxTime
 
-    @id = crypto.createHash('md5').update(@statement).digest("hex")
-    @count = 0
-    @bulks = []
+    @statement = "INSERT INTO #{@tableName} FORMAT JSONCompactEachRow\n"
 
     assert options.pathToCargoFolder, "missing options.pathToCargoFolder"
     @pathToCargoFolder = options.pathToCargoFolder
-    @pathToCargoFile = path.join(@pathToCargoFolder, FILENAME_PREFIX + @id)
+    @pathToCargoFile = path.join(@pathToCargoFolder, FILENAME_PREFIX + @tableName)
+    @httpPostOptions = cargoOptionToHttpOption(options, {path: '/?wait_end_of_query=1', method:'POST'})
+    @vehicle = options.vehicle
 
     debuglog "[new Cargo] @statement:#{@statement}, @maxTime:#{@maxTime}, @maxRows:#{@maxRows}, @commitInterval:#{@commitInterval}, @pathToCargoFile:#{@pathToCargoFile}"
 
@@ -90,10 +88,7 @@ class Cargo
     assert arr.length > 0, "blank row can not be accepted."
     for item, i in arr
       arr[i] = Math.round(item.getDate() / 1000)  if (item instanceof Date)
-
     @cachedRows.push(JSON.stringify(arr))
-    #debuglog "[push] row? #{(@cachedRows.length > @maxRows)}, time? #{(Date.now() > @lastFlushAt + @maxRows)} "
-    #@flushToFile() if (@cachedRows.length > @maxRows) or (Date.now() > @lastFlushAt + @maxRows)
     return
 
   # flush memory cache to the disk file
@@ -139,20 +134,55 @@ class Cargo
     fs.appendFileSync(@pathToCargoFile, rowsToFlush.join("\n")+"\n")
     return
 
+  uploadCargoFile : (filepath)->
+    debuglog "[uploadCargoFile] filepath:", filepath
+    proc = (resolve, reject)=>
+      try
+        srcStream = fs.createReadStream(filepath)
+      catch err
+        reject(err)
+        return
+
+      req = @vehicle.request @httpPostOptions, (res)=>
+        unless res and res.statusCode is 200
+          reject(new Error("ClickHouse server response statusCode:#{res and res.statusCode}"))
+          return
+        resolve(res)
+        return
+
+      req.on 'error', (err)->
+        debuglog "[uploadCargoFile : on err:]", err
+        reject(err)
+        return
+
+      req.on 'timeout', ->
+        debuglog "[uploadCargoFile : on timeout]"
+        req.destroy(new Error('request timeout'))
+        return
+
+      req.on 'connect', =>
+        debuglog "[uploadCargoFile : on connect]"
+        req.write(@statement)
+        srcStream.pipe(req)
+        return
+      return
+
+    return new Promise(proc)
+
   # check if to commit disk file to clickhouse DB
   exam : ->
     try
       await @flushToFile()
     catch err
-      debuglog "[exam] ABORT fail to flush. error:", err
+      debuglog "[exam #{@tableName}] ABORT fail to flush. error:", err
       return
 
     unless Date.now() > @lastCommitAt + @commitInterval
-      debuglog "[exam] SKIP tick not reach"
+      debuglog "[exam #{@tableName}] SKIP tick not reach"
       return
 
     unless isThisLeader()
-      debuglog "[exam] CANCLE NOT leadWorkerId"
+      debuglog "[exam #{@tableName}] CANCLE NOT leadWorkerId"
       # non-leader skip 10 commit rounds
       @lastCommitAt = Date.now() + @commitInterval * 10
       return
@@ -164,9 +194,7 @@ class Cargo
       await @commitToClickhouseDB()
       @lastCommitAt = Date.now()
     catch err
-      debuglog "[exam] FAILED to commit. error:", err
-
-    @_isExaming = false  # release
+      debuglog "[exam #{@tableName}] FAILED to commit. error:", err
     return
 
   # prepar all uncommitted local files
@@ -195,7 +223,7 @@ class Cargo
       return false
 
     # rotate disk file
-    pathToRenameFile = path.join(@pathToCargoFolder, "#{FILENAME_PREFIX}#{@id}.#{Date.now().toString(36) + "_#{++StaticCountWithinProcess}"}.#{CLUSTER_WORKER_ID}#{EXTNAME_UNCOMMITTED}")
+    pathToRenameFile = path.join(@pathToCargoFolder, "#{FILENAME_PREFIX}#{@tableName}.#{Date.now().toString(36) + "_#{++StaticCountWithinProcess}"}.#{CLUSTER_WORKER_ID}#{EXTNAME_UNCOMMITTED}")
     debuglog "[rotateFile] rotate to #{pathToRenameFile}"
 
     try
@@ -208,6 +236,7 @@ class Cargo
 
   # commit local rotated files to remote ClickHouse DB
   commitToClickhouseDB : ->
+    debuglog "[commitToClickhouseDB]"
     if @_isCommiting
       debuglog "[commitToClickhouseDB] SKIP is committing"
       return
@@ -215,19 +244,21 @@ class Cargo
     @_isCommiting = true  #lock on
 
     try
-      filenamList = fsAsync.readdir(@pathToCargoFolder)
+      filenamList = await fsAsync.readdir(@pathToCargoFolder)
     catch err
       #debuglog "[commitToClickhouseDB > readdir] err:", err, ", filenamList:", filenamList
       debuglog "[commitToClickhouseDB > ls] FAILED error:", err
       @_isCommiting = false  # lock release
       return
 
+    debuglog "[commitToClickhouseDB > readdir] filenamList:", filenamList
+
     unless Array.isArray(filenamList) and (filenamList.length > 0)
       @_isCommiting = false  # lock release
       return
 
     # filter out non-commits
-    rotationPrefix = FILENAME_PREFIX + @id + '.'
+    rotationPrefix = FILENAME_PREFIX + @tableName + '.'
     filenamList = filenamList.filter (item)->
       return item.startsWith(rotationPrefix) and item.endsWith(EXTNAME_UNCOMMITTED)
 
@@ -235,25 +266,29 @@ class Cargo
       @_isCommiting = false  # lock release
       return
 
-    debuglog "[commitToClickhouseDB] filenamList(#{filenamList.length})" #, filenamList
+    debuglog "[commitToClickhouseDB] 3 filenamList(#{filenamList.length})" #, filenamList
     filenamList = filenamList.map (item)=> path.join(@pathToCargoFolder, item)
 
     # submit each local uncommit sequentially
     for filepath in filenamList
       # submit 1 local uncommit to clickhouse
+      #httpPostOptions = Object.assign({}, @httpPostOptions,
+        #path: "/?" + qs.stringify({query:@statement, 'wait_end_of_query':1 })
+      #)
+      #submitUrl = url.format(@httpPostOptions)
 
-      httpPostOptions = cargoOptionToHttpOption(
-        CargoOptions,
-        path: "/?" + qs.stringify({query:@statement, format:'JSONCompactEachRow', 'wait_end_of_query':1 })
-      )
-      debuglog "[commitToClickhouseDB] submit:#{filepath}, httpPostOptions:", httpPostOptions
+      #debuglog "[commitToClickhouseDB] submit:#{filepath}, submitUrl:#{submitUrl}, httpPostOptions:", httpPostOptions
 
       try
-        res = await pipeline( fs.createReadStream(filepath), got.stream.post(httpPostOptions))
+        #res = await pipeline(fs.createReadStream(filepath), got.stream.post(httpPostOptions))
+        res = await @uploadCargoFile(filepath)
         debuglog "[commitToClickhouseDB] res:#{res}"
         await fsAsync.unlink(filepath)  # remove successfully commited local file
       catch err
         debuglog "[commitToClickhouseDB] FAIL to commit:#{filepath}, error:", err
+
+      @_isCommiting = false  # lock release
+      return
 
     @_isCommiting = false  # lock release
     return

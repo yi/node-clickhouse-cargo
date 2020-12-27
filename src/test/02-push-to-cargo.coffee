@@ -14,9 +14,6 @@ ClickHouse = require('@apla/clickhouse')
 
 TABLE_NAME = "cargo_test.unittest02"
 
-QUERY = "INSERT INTO #{TABLE_NAME} "
-QUERY2 = "INSERT INTO #{TABLE_NAME}_set2 "
-
 STATEMENT_INSERT = "INSERT INTO #{TABLE_NAME}"
 
 STATEMENT_DROP_TABLE = "DROP TABLE IF EXISTS #{TABLE_NAME}"
@@ -41,22 +38,10 @@ INIT_OPTION =
 
 NUM_OF_LINE = 429 # NOTE: bulk flushs every 100 lines
 
-getClickHouseClient = ()->
-  profileName = process.env.CLICKHOUSE_CARGO_PROFILE
-  assert profileName, "missing process.env.CLICKHOUSE_CARGO_PROFIL"
-  profileName += ".json" unless path.extname(profileName) is ".json"
-  pathToConfig = path.join(os.homedir(), ".clickhouse-cargo", profileName )
-  debuglog "[getClickHouseClient] try auto init from CLICKHOUSE_CARGO_PROFILE from #{pathToConfig}"
-  try
-    profileConfig = JSON.parse(fs.readFileSync(pathToConfig))
-  catch err
-    debuglog "[static init] FAILED error:", err
-  return new ClickHouse(profileConfig)
-
 describe "push log to cargo and flush manully", ->
   @timeout(20000)
 
-  theCargo = createCargo(QUERY)
+  theCargo = createCargo(TABLE_NAME)
   fs.unlinkSync(theCargo.pathToCargoFile) if fs.existsSync(theCargo.pathToCargoFile)  # clean up existing log
   columnValueString = Date.now().toString(36)
 
@@ -91,7 +76,7 @@ describe "push log to cargo and flush manully", ->
 describe "push log to cargo and flush automatically", ->
   @timeout(20000)
 
-  theCargo = createCargo(QUERY2)
+  theCargo = createCargo("#{TABLE_NAME}_set2")
   fs.unlinkSync(theCargo.pathToCargoFile) if fs.existsSync(theCargo.pathToCargoFile)  # clean up existing log
   columnValueString = Date.now().toString(36)
 

@@ -8,8 +8,8 @@ INIT_OPTION =
   maxRows : 100
   commitInterval : 8000
 
-QUERY = "INSERT INTO test.cargo0"
-QUERY1 = "INSERT INTO test.cargo1"
+QUERY = "test.cargo0"
+QUERY1 = "test.cargo1"
 
 describe "init clickhouse_cargo", ->
 
@@ -27,18 +27,17 @@ describe "init clickhouse_cargo", ->
     done()
     return
 
-  it "cargo must be created with an insert statement", (done)->
-    assert.throws((()->createCargo()), Error, /blank/)
-    assert.throws((()->createCargo("select * from dual")), Error, /insert/)
+  it "cargo must be created with tableName", (done)->
+    assert.throws((()->createCargo()), Error, /tableName/)
+    assert.throws((()->createCargo("select * from dual")), Error, /tableName/)
 
     cargo0 = createCargo(QUERY)
     #console.log cargo0
     assert cargo0
-    assert cargo0.id, "bad cargo0.id"
-    assert cargo0.maxTime is INIT_OPTION.maxTime, "bad cargo0.maxTime:#{cargo0.maxTime} => #{INIT_OPTION.maxTime}"
-    assert cargo0.maxRows is INIT_OPTION.maxRows, "bad cargo0.maxRows"
-    assert cargo0.commitInterval is INIT_OPTION.commitInterval, "bad cargo0.commitInterval"
-
+    assert cargo0.tableName is QUERY, "bad cargo0.tableName"
+    #assert cargo0.maxTime is INIT_OPTION.maxTime, "bad cargo0.maxTime:#{cargo0.maxTime} => #{INIT_OPTION.maxTime}"
+    #assert cargo0.maxRows is INIT_OPTION.maxRows, "bad cargo0.maxRows"
+    #assert cargo0.commitInterval is INIT_OPTION.commitInterval, "bad cargo0.commitInterval"
     done()
     return
 

@@ -1,6 +1,8 @@
 
 pkg = require "../package.json"
 assert = require "assert"
+http = require ('http')
+https = require('https')
 
 toSQLDateString = (date)->
   #debuglog "[toSQLDateString] date:", date
@@ -14,11 +16,13 @@ toSQLDateString = (date)->
 
 cargoOptionToHttpOption = (cargoOption, mixin)->
   options =
+    #protocol : if cargoOption.vehicle is https then 'https:' else 'http:'
     host : cargoOption.host
     port : cargoOption.port
     headers :
       'X-ClickHouse-User' : cargoOption.user
       'X-ClickHouse-Key'  : cargoOption.password || ''
+      #'X-ClickHouse-Format'  : 'JSONCompactEachRow'
       'User-Agent' : "#{pkg.name}/#{pkg.version}"
 
   return Object.assign(mixin || {}, options)

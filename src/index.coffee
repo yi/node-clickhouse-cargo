@@ -13,7 +13,8 @@ debuglog = require("debug")("chcargo:index@#{CLUSTER_WORKER_ID}")
 
 Cargo = require "./cargo"
 
-STATEMENT_TO_CARGO = {}
+REG_INVALID_SQL_TABLE_NAME_CHAR = /[^\w\d\.\-_]/i
+TABLE_NAME_TO_CARGO = {}
 
 CargoOptions = {}
 
@@ -76,7 +77,7 @@ init = (config)->
     # flush in-memroy data when process crash
     process.on 'uncaughtException', (err)->
       debuglog "⚠️⚠️⚠️  [flushSyncInMemoryCargo] ⚠️⚠️⚠️  "
-      for statement, cargo of STATEMENT_TO_CARGO
+      for tableName, cargo of STATEMENT_TO_CARGO
         cargo.flushSync()
       throw err
       return
@@ -84,24 +85,22 @@ init = (config)->
   return
 
 # Create a cargo instance.
-# Cargos are bind to statements. Call create multiple times with the same statement, will result in one shared cargo.
-# @param statement String, sql insert statement
-createCargo = (statement)->
-  debuglog "[createCargo] statement:#{statement}"
+# Cargos are bind to table. Call create multiple times with the same table name, will result in one shared cargo.
+# @param tableName String, the name of ClickHouse table which data is inserted
+createCargo = (tableName)->
+  debuglog "[createCargo] tableName:#{tableName}"
   assert CargoOptions.host and CargoOptions.vehicle, "ClickHouse-Cargo needs to be inited first"
-  statement = String(statement || "").trim()
-  assert statement, "statement must not be blank"
+  tableName = String(tableName || "").trim()
+  assert tableName and not REG_INVALID_SQL_TABLE_NAME_CHAR.test(tableName), "invalid tableName:#{tableName}"
 
-  assert  statement.toUpperCase().startsWith("INSERT"), "statement must be an insert sql"
-
-  cargo = STATEMENT_TO_CARGO[statement]
+  cargo = TABLE_NAME_TO_CARGO[tableName]
   if cargo
-    debuglog "[createCargo] reuse cargo:", cargo.toString()
+    debuglog "[createCargo] reuse cargo@#{tableName}:", cargo.toString()
     return cargo
 
-  cargo = new Cargo(statement, CargoOptions)
-  STATEMENT_TO_CARGO[statement] = cargo
-  debuglog "[createCargo] cargo:", cargo.toString()
+  cargo = new Cargo(tableName, CargoOptions)
+  TABLE_NAME_TO_CARGO[tableName] = cargo
+  debuglog "[createCargo] cargo@#{tableName}:", cargo.toString()
   return cargo
 
 
@@ -110,7 +109,7 @@ examCargos = ->
   await new Promise((resolve)=> setTimeout(resolve, 1000))
 
   debuglog "[examCargos]"
-  for statement, cargo of STATEMENT_TO_CARGO
+  for tableName, cargo of TABLE_NAME_TO_CARGO
     try
       await cargo.exam()   # one-by-one
     catch err

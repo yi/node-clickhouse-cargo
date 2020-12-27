@@ -7,6 +7,10 @@ debuglog = require("debug")("chcargo:test:03")
 {sleep} = require "../utils"
 assert = require ("assert")
 fs = require "fs"
+fs = require "fs"
+os = require "os"
+path = require "path"
+ClickHouse = require('@apla/clickhouse')
 
 TABLE_NAME = "cargo_test.unittest03"
 
@@ -79,7 +83,7 @@ describe "commit bulk", ->
     for i in [0...NUM_OF_LINE]
       theCargo.push new Date, i, columnValueString
 
-    await sleep 15 # wait file stream flush
+    await sleep 20 # wait file stream flush
     return
 
   it "bulk should committed", (done)->
@@ -87,9 +91,7 @@ describe "commit bulk", ->
     done()
     return
 
-
   it "records should be written into remote ClickHouse server", (done)->
-
     rows = []
     debuglog "[read db] select:", STATEMENT_SELECT
     stream = clickHouseClient.query STATEMENT_SELECT, {format:"JSONCompactEachRow"}, (err, result)->
