@@ -78,7 +78,7 @@ init = (config)->
     # flush in-memroy data when process crash
     process.on 'uncaughtException', (err)->
       debuglog "⚠️⚠️⚠️  [flushSyncInMemoryCargo] ⚠️⚠️⚠️  "
-      for tableName, cargo of STATEMENT_TO_CARGO
+      for tableName, cargo of TABLE_NAME_TO_CARGO
         cargo.flushSync()
       throw err
       return
