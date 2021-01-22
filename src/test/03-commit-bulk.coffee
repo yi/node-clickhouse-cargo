@@ -86,7 +86,7 @@ describe "commit bulk", ->
     for i in [0...NUM_OF_LINE]
       theCargo.push(new Date, i, columnValueString)
 
-    await sleep 10 # wait file stream flush
+    await sleep 20 # wait file stream flush
     return
 
   it "bulk should committed", (done)->
