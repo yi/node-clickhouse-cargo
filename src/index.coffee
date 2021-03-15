@@ -7,6 +7,7 @@ http = require ('http')
 https = require('https')
 cluster = require('cluster')
 { cargoOptionToHttpOption } = require "./utils"
+{eachSeries} = require "async"
 
 CLUSTER_WORKER_ID = if cluster.isMaster then "nocluster" else cluster.worker.id
 debuglog = require("debug")("chcargo:index@#{CLUSTER_WORKER_ID}")
@@ -105,19 +106,40 @@ createCargo = (tableName)->
   return cargo
 
 
+#examCargos = ->
+  ## sleep
+  #await new Promise((resolve)=> setTimeout(resolve, 1000))
+
+  #for tableName, cargo of TABLE_NAME_TO_CARGO
+    #try
+      #startAt = Date.now()
+      #await cargo.exam()   # one-by-one
+      #debuglog "[examCargos] #{cargo.tableName} takes: #{diff}ms" if (diff = Date.now() - startAt) >  5
+    #catch err
+      #debuglog "[examCargos] FAILED error:", err
+
+  #await examCargos()
+  #return
+
+examOneCargo = (cargo)->
+  try
+    examStartAt = Date.now()
+    await cargo.exam()   # one-by-one
+    #debuglog "[examCargos] #{cargo.tableName} takes: #{diff}ms" if (diff = Date.now() - examStartAt) >  5
+    debuglog "[examOneCargo] #{cargo.tableName} takes: #{Date.now() - examStartAt}ms"
+  catch err
+    debuglog "[examOneCargo] #{cargo.tableName} FAILED error:", err
+  return
+
 examCargos = ->
-  # sleep
-  await new Promise((resolve)=> setTimeout(resolve, 1000))
-
-  for tableName, cargo of TABLE_NAME_TO_CARGO
-    try
-      startAt = Date.now()
-      await cargo.exam()   # one-by-one
-      debuglog "[examCargos] #{cargo.tableName} takes: #{diff}ms" if (diff = Date.now() - startAt) >  5
-    catch err
-      debuglog "[examCargos] FAILED error:", err
-
-  await examCargos()
+  #debuglog "[examCargos]"
+  routineStartAt = Date.now()
+  await eachSeries(TABLE_NAME_TO_CARGO, examOneCargo)
+  msSpent = Date.now() - routineStartAt
+  debuglog "[examCargos] rountine takes #{msSpent}ms"
+  # sleep till next seconds
+  await new Promise((resolve)=> setTimeout(resolve, 1000 - msSpent)) if msSpent < 1000
+  setImmediate((-> await examCargos()))
   return
 
 ## static init

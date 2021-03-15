@@ -116,12 +116,12 @@ class Cargo extends EventEmitter
 
     rowsToFlush = @cachedRows
     @cachedRows = []
-    debuglog("#{@} [flushToFile] -> #{rowsToFlush.length} rows")
+    #debuglog("#{@} [flushToFile] -> #{rowsToFlush.length} rows")
 
     try
       await fsAsync.appendFile(@pathToCargoFile, rowsToFlush.join("\n")+"\n")
     catch err
-      debuglog "#{@} [flushToFile] FAILED error:", err
+      debuglog "#{@} [flushToFile] #{rowsToFlush.length} rows FAILED error:", err
       @cachedRows = rowsToFlush.concat(@cachedRows) # unshift data back
 
     debuglog "#{@} [flushToFile] SUCCESS #{rowsToFlush.length} rows"
@@ -281,7 +281,7 @@ class Cargo extends EventEmitter
     for filepath in filenamList
       try
         res = await @uploadCargoFile(filepath)
-        debuglog "[commitToClickhouseDB] res.headers:", res.headers
+        debuglog "[commitToClickhouseDB] res.headers: #{JSON.stringify(res.headers)}"
         await fsAsync.unlink(filepath)  # remove successfully commited local file
       catch err
         debuglog "[commitToClickhouseDB] FAIL to commit:#{filepath}, error:", err
