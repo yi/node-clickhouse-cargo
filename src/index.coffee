@@ -7,7 +7,7 @@ http = require ('http')
 https = require('https')
 cluster = require('cluster')
 { cargoOptionToHttpOption } = require "./utils"
-{eachSeries} = require "async"
+#{eachSeries} = require "async"
 
 CLUSTER_WORKER_ID = if cluster.isMaster then "nocluster" else cluster.worker.id
 debuglog = require("debug")("chcargo:index@#{CLUSTER_WORKER_ID}")
@@ -118,7 +118,11 @@ examOneCargo = (cargo)->
 examCargos = ->
   #debuglog "[examCargos]"
   routineStartAt = Date.now()
-  await eachSeries(TABLE_NAME_TO_CARGO, examOneCargo)
+
+  #await eachSeries(TABLE_NAME_TO_CARGO, examOneCargo)
+  for tableName, cargo of TABLE_NAME_TO_CARGO
+    await examOneCargo(cargo)
+
   msSpent = Date.now() - routineStartAt
   debuglog "[examCargos] rountine takes #{msSpent}ms"
   # sleep till next seconds
