@@ -63,7 +63,8 @@ init = (config)->
 
   #debuglog "[init] CargoOptions:", CargoOptions
 
-  isToFlushBeforeCrash = config.saveWhenCrash isnt false
+  isToFlushBeforeCrash = if config.saveWhenCrash is false then false else true
+  #debuglog "[init] config.saveWhenCrash:#{config.saveWhenCrash},  isToFlushBeforeCrash:", isToFlushBeforeCrash
   delete config.saveWhenCrash
 
   # pin the given ClickHouse server
@@ -84,6 +85,13 @@ init = (config)->
       throw err
       return
 
+    # https://pm2.keymetrics.io/docs/usage/signals-clean-restart/
+    process.on 'SIGINT', ->
+      console.log "⚠️⚠️⚠️  [PM2 STOP SIGNAL] ⚠️⚠️⚠️  "
+      for tableName, cargo of TABLE_NAME_TO_CARGO
+        cargo.flushSync()
+      setImmediate((-> process.exit() ))
+      return
   return
 
 # Create a cargo instance.

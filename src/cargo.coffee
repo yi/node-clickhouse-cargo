@@ -245,24 +245,25 @@ class Cargo extends EventEmitter
   # commit local rotated files to remote ClickHouse DB
   commitToClickhouseDB : ->
     #debuglog "[commitToClickhouseDB]"
-    if @_isCommiting
-      debuglog "[commitToClickhouseDB] SKIP is committing"
-      return
+    #if @_isCommiting
+      #debuglog "[commitToClickhouseDB] SKIP is committing"
+      #return
 
-    @_isCommiting = true  #lock on
+    #@_isCommiting = true  #lock on
 
     try
       filenamList = await fsAsync.readdir(@pathToCargoFolder)
     catch err
       #debuglog "[commitToClickhouseDB > readdir] err:", err, ", filenamList:", filenamList
       debuglog "[commitToClickhouseDB > ls] FAILED error:", err
-      @_isCommiting = false  # lock release
+      #@_isCommiting = false  # lock release
       return
 
     #debuglog "[commitToClickhouseDB > readdir] filenamList:", filenamList
 
     unless Array.isArray(filenamList) and (filenamList.length > 0)
-      @_isCommiting = false  # lock release
+      debuglog "[commitToClickhouseDB] CANCLE empty filenamList"
+      #@_isCommiting = false  # lock release
       return
 
     # filter out non-commits
@@ -271,7 +272,8 @@ class Cargo extends EventEmitter
       return item.startsWith(rotationPrefix) and item.endsWith(EXTNAME_UNCOMMITTED)
 
     unless filenamList.length > 0
-      @_isCommiting = false  # lock release
+      debuglog "[commitToClickhouseDB > ls] CANCLE empty valid filenamList"
+      #@_isCommiting = false  # lock release
       return
 
     debuglog "[commitToClickhouseDB] filenamList(#{filenamList.length})" #, filenamList
@@ -288,7 +290,7 @@ class Cargo extends EventEmitter
         err.filepath = filepath
         @emit 'error', err
 
-    @_isCommiting = false  # lock release
+    #@_isCommiting = false  # lock release
     return
 
 module.exports = Cargo
