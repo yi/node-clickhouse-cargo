@@ -105,22 +105,6 @@ createCargo = (tableName)->
   debuglog "[createCargo] cargo@#{tableName}:", cargo.toString()
   return cargo
 
-
-#examCargos = ->
-  ## sleep
-  #await new Promise((resolve)=> setTimeout(resolve, 1000))
-
-  #for tableName, cargo of TABLE_NAME_TO_CARGO
-    #try
-      #startAt = Date.now()
-      #await cargo.exam()   # one-by-one
-      #debuglog "[examCargos] #{cargo.tableName} takes: #{diff}ms" if (diff = Date.now() - startAt) >  5
-    #catch err
-      #debuglog "[examCargos] FAILED error:", err
-
-  #await examCargos()
-  #return
-
 examOneCargo = (cargo)->
   try
     examStartAt = Date.now()

@@ -101,7 +101,7 @@ class Cargo extends EventEmitter
   # @param forced Boolean, is force to flush file
   flushToFile : (forced)->
     #debuglog("#{@} [flushToFile] @_isFlushing:", @_isFlushing)
-    return if @_isFlushing
+    #return if @_isFlushing
 
     unless @cachedRows.length > 0
       #debuglog("#{@} [flushToFile] nothing to flush")
@@ -112,7 +112,7 @@ class Cargo extends EventEmitter
       #debuglog("#{@} [flushToFile] SKIP threshold not reach")
       return
 
-    @_isFlushing = true
+    #@_isFlushing = true
 
     rowsToFlush = @cachedRows
     @cachedRows = []
@@ -126,7 +126,7 @@ class Cargo extends EventEmitter
 
     debuglog "#{@} [flushToFile] SUCCESS #{rowsToFlush.length} rows"
     @lastFlushAt = Date.now()
-    @_isFlushing = false
+    #@_isFlushing = false
     return
 
   flushSync : ->
