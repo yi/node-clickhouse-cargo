@@ -22,7 +22,7 @@ fsAsync =
   appendFile : promisify(fs.appendFile)
   stat : promisify(fs.stat)
 
-debuglog "[static init] fsAsync:", fsAsync
+#debuglog "[static init] fsAsync:", fsAsync
 
 FILENAME_PREFIX = "cargo_"
 
