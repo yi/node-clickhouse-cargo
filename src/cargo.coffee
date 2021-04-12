@@ -38,8 +38,9 @@ MIN_ROWS = 100
 
 DEFAULT_COMMIT_INTERVAL = 5000
 
-StaticCountWithinProcess = 0
+DEFAULT_MAX_INSET_PARTS = 100
 
+StaticCountWithinProcess = 0
 
 class Cargo extends EventEmitter
   toString : -> "[Cargo #{@tableName}]"
@@ -60,6 +61,9 @@ class Cargo extends EventEmitter
 
     @commitInterval = parseInt(options.commitInterval) || DEFAULT_COMMIT_INTERVAL
     @commitInterval = DEFAULT_COMMIT_INTERVAL if @commitInterval < @maxTime
+
+    @maxInsetParts = parseInt(options.maxInsetParts) || DEFAULT_MAX_INSET_PARTS
+    @maxInsetParts = DEFAULT_MAX_INSET_PARTS unless @maxInsetParts > 0
 
     #@statement = "INSERT INTO #{@tableName} FORMAT JSONCompactEachRow\n"
     @statement = "INSERT INTO #{@tableName} FORMAT JSONCompactEachRow "
@@ -277,6 +281,21 @@ class Cargo extends EventEmitter
       return
 
     debuglog "[commitToClickhouseDB] filenamList(#{filenamList.length})" #, filenamList
+
+    # sort filenamList from new to old
+    splitMark = "#{FILENAME_PREFIX}#{@tableName}."
+    filenamList.sort (a, b)->
+      tsA = parseInt((a.split(splitMark) || [])[1] || 0, 36)
+      tsB = parseInt((b.split(splitMark) || [])[1] || 0, 36)
+      #debuglog "[commitToClickhouseDB] tsA:#{tsA} tsB:#{tsB}"
+      return tsB - tsA
+    debuglog "[commitToClickhouseDB] AFTER SORT filenamList(#{filenamList.length})" #, filenamList
+
+    # truncate filenamList if too long
+    filenamList.length = Math.min(filenamList.length,  @maxInsetParts)
+    debuglog "[commitToClickhouseDB] AFTER SORT filenamList(#{filenamList.length})" #, filenamList
+
+    # padding full file path
     filenamList = filenamList.map (item)=> path.join(@pathToCargoFolder, item)
 
     # submit each local uncommit sequentially

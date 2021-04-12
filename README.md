@@ -90,6 +90,7 @@ clickhouse-cargo.init(options: Options)
 | `maxTime`        |          |  1000         | For how long in milliseconds, a cargo will keep in-memory insert buffer before flushing it to file.
 | `maxRows`        |          |  100          | For how many rows a cargo will keep in-memory.
 | `commitInterval` |          |  5000         | Interval(ms) for cargo to commit to ClickHouse.
+| `maxInsetParts`  |          |  100          | For how many parts will be inserted into ClickHouse in a single exame routine. Keep value less then 300 to avoide `Too many parts` issue happend on clickhouse server-side
 | `saveWhenCrash`  |          |  true         | When `false`, cargos will not flushSync in-memory data when node process crashes.
 | `user`           |          |               | Authentication user.
 | `password`       |          |               | Authentication password.

@@ -29,8 +29,9 @@ STATEMENT_DROP_TABLE = "DROP TABLE IF EXISTS #{TABLE_NAME}"
 
 STATEMENT_SELECT = "SELECT * FROM #{TABLE_NAME} WHERE pos_id='#{columnValueString}' LIMIT 100000 FORMAT JSONCompactEachRow "
 
-NUM_OF_LINE = 3396
-
+NUM_OF_LINE = 339
+NUM_OF_FILES = 111
+SUM_ROWS = NUM_OF_LINE * NUM_OF_FILES
 
 getClickHouseClient = ()->
   profileName = process.env.CLICKHOUSE_CARGO_PROFILE
@@ -46,7 +47,7 @@ getClickHouseClient = ()->
 
 
 describe "restore-local-rotations", ->
-  @timeout(60000)
+  @timeout(200000)
 
   clickHouseClient = getClickHouseClient()
   theCargo = null
@@ -62,24 +63,24 @@ describe "restore-local-rotations", ->
   after -> process.exit(0)
 
   it "prepare local rotations", (done)->
+    for j in [0...NUM_OF_FILES]
+      try
+        theFilepath = path.join(process.cwd(), "cargo_files", "cargo_#{TABLE_NAME}.#{(Date.now() + j).toString(36)}_unittest.nocluster.uncommitted")
+        debuglog "[prepare #{j}] theFilepath:", theFilepath
 
-    try
-      theFilepath = path.join(process.cwd(), "cargo_files", "cargo_#{TABLE_NAME}.#{Date.now().toString(36)}_unittest.nocluster.uncommitted")
-      debuglog "[prepare] theFilepath:", theFilepath
+        content = ""
+        for i in [0...NUM_OF_LINE]
+          arr = [Math.round((Date.now() + j) / 1000), j * NUM_OF_LINE + i,  columnValueString]
+          content += JSON.stringify(arr) + "\n"
+        content = content.substr(0, content.length - 1)
+        fs.writeFileSync(theFilepath, content)
 
-      content = ""
-      for i in [0...NUM_OF_LINE]
-        arr = [Math.round(Date.now() / 1000), i,  columnValueString]
-        content += JSON.stringify(arr) + "\n"
-      content = content.substr(0, content.length - 1)
-      fs.writeFileSync(theFilepath, content)
+      catch err
+        console.log "failed error:", err
 
-      theCargo = createCargo(TABLE_NAME)
 
-    catch err
-      console.log "failed error:", err
-
-    setTimeout(done, 20000)   # wait for cargo.exam
+    theCargo = createCargo(TABLE_NAME)
+    setTimeout(done, 60000)   # wait for cargo.exam
     return
 
 
@@ -96,24 +97,24 @@ describe "restore-local-rotations", ->
       #console.dir result
       result = JSON.parse(result)
 
-      debuglog "[read db] result:", result.length
+      debuglog "[read db] SUM_ROWS:#{SUM_ROWS} result:", result.length
       #console.dir result, depth:10
 
-      assert result.length is NUM_OF_LINE, "unmatching row length local:#{NUM_OF_LINE}, remote:#{result.length}"
+      assert result.length is SUM_ROWS, "unmatching row length local:#{SUM_ROWS}, remote:#{result.length}"
       result.sort (a, b)-> return a[1] - b[1]
 
       for row, i in result
-        assert row[1] is i, "unmatching field 1 "
+        #assert row[1] is i, "unmatching field 1 "
         assert row[2] is  columnValueString, "unmatching field 2 "
 
       done()
       return
     return
 
-  it "local bulks should be cleaned", (done)->
-    assert fs.existsSync(theFilepath) is false, "local bulks should be cleaned:#{theFilepath}"
-    done()
-    return
+  #it "local bulks should be cleaned", (done)->
+    #assert fs.existsSync(theFilepath) is false, "local bulks should be cleaned:#{theFilepath}"
+    #done()
+    #return
 
   return
 

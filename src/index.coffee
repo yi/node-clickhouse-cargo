@@ -61,6 +61,10 @@ init = (config)->
   CargoOptions.commitInterval = commitInterval if commitInterval > 0
   delete config.commitInterval
 
+  maxInsetParts = parseInt(config.maxInsetParts)
+  CargoOptions.maxInsetParts = maxInsetParts if maxInsetParts > 0
+  delete config.maxInsetParts
+
   #debuglog "[init] CargoOptions:", CargoOptions
 
   isToFlushBeforeCrash = if config.saveWhenCrash is false then false else true
