@@ -4,7 +4,7 @@ path = require "path"
 qs   = require ('querystring')
 cluster = require('cluster')
 assert = require "assert"
-EventEmitter = require('events')
+#EventEmitter = require('events')
 {promisify} = require('util')
 {isThisLeader} = require "./leader_election"
 {cargoOptionToHttpOption} = require "./utils"
@@ -42,7 +42,7 @@ DEFAULT_MAX_INSET_PARTS = 100
 
 StaticCountWithinProcess = 0
 
-class Cargo extends EventEmitter
+class Cargo # extends EventEmitter
   toString : -> "[Cargo #{@tableName}]"
 
   # @param SQLInsertString tableName
@@ -52,7 +52,7 @@ class Cargo extends EventEmitter
   #                     .maxRows
   #                     .commitInterval
   constructor: (@tableName, options={})->
-    super()
+    #super()
     @maxTime = parseInt(options.maxTime) || MIN_TIME
     @maxTime = MIN_TIME if @maxTime < MIN_TIME
 
@@ -307,7 +307,7 @@ class Cargo extends EventEmitter
       catch err
         debuglog "[commitToClickhouseDB] FAIL to commit:#{filepath}, error:", err
         err.filepath = filepath
-        @emit 'error', err
+        #@emit 'error', err
 
     #@_isCommiting = false  # lock release
     return

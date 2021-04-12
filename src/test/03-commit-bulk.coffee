@@ -70,9 +70,9 @@ describe "commit bulk", ->
         theCargo = createCargo(TABLE_NAME)
 
         # receive notification when commit failed
-        theCargo.on 'error', (err)->
-          debuglog "[on cargo error] error:", err
-          return
+        #theCargo.on 'error', (err)->
+          #debuglog "[on cargo error] error:", err
+          #return
 
         fs.unlinkSync(theCargo.pathToCargoFile) if fs.existsSync(theCargo.pathToCargoFile)  # clean up existing log
         done()

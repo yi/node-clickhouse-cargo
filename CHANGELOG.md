@@ -1,5 +1,8 @@
+2021/4/12 Version: 3.0.5
+===
+ 1. Cargo no longer extends EventEmitter
 
-2021/3/15 Version: 3.0.3
+2021/4/12 Version: 3.0.3
 ===
  1. Introduce config.maxInsetParts a) to avoid local commits blocked due to a single failure in the commit queue. and b) to avoide `Too many parts` errors happend on clickhouse server-side
 
