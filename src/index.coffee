@@ -122,7 +122,8 @@ examOneCargo = (cargo)->
     examStartAt = Date.now()
     await cargo.exam()   # one-by-one
     #debuglog "[examCargos] #{cargo.tableName} takes: #{diff}ms" if (diff = Date.now() - examStartAt) >  5
-    debuglog "[examOneCargo] #{cargo.tableName} takes: #{Date.now() - examStartAt}ms"
+    msSpent = Date.now() - examStartAt
+    debuglog "[examOneCargo] #{cargo.tableName} takes: #{msSpent}ms" if msSpent > 100
   catch err
     debuglog "[examOneCargo] #{cargo.tableName} FAILED error:", err
   return
@@ -136,7 +137,7 @@ examCargos = ->
     await examOneCargo(cargo)
 
   msSpent = Date.now() - routineStartAt
-  debuglog "[examCargos] rountine takes #{msSpent}ms"
+  debuglog "[examCargos] rountine takes #{msSpent}ms" if msSpent > 100
   # sleep till next seconds
   await new Promise((resolve)=> setTimeout(resolve, 1000 - msSpent)) if msSpent < 1000
   setImmediate((-> await examCargos()))

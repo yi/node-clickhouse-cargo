@@ -178,6 +178,51 @@ class Cargo # extends EventEmitter
 
     return new Promise(proc)
 
+
+  # upload multiple local uncommits to clickhouse
+  uploadLocalUncommitsToClickhouse : (filenamList)->
+    return unless Array.isArray(filenamList) and filenamList.length > 0
+
+    proc = (resolve, reject)=>
+      req = @vehicle.request @httpPostOptions, (res)=>
+        unless res and res.statusCode is 200
+          reject(new Error("ClickHouse server response statusCode:#{res and res.statusCode}"))
+          return
+
+        debuglog "[uploadLocalUncommitsToClickhouse] SUCCESS uploaded #{filenamList.length} uncommits, res.headers:", res.headers
+        resolve(res)
+        return
+
+      req.on 'error', (err)->
+        debuglog "[uploadLocalUncommitsToClickhouse : on err:]", err
+        reject(err)
+        return
+
+      req.on 'timeout', ->
+        debuglog "[uploadLocalUncommitsToClickhouse : on timeout]"
+        req.destroy(new Error('request timeout'))
+        return
+
+      req.write(@statement)
+
+      for filepath in filenamList
+        try
+          debuglog "[uploadLocalUncommitsToClickhouse] uploading:", filepath
+          srcStream = fs.createReadStream(filepath)
+          srcStream.pipe(req)
+        catch err
+          reject(err)
+          return
+
+      return
+
+    await new Promise(proc)
+
+    for filepath in filenamList
+      debuglog "[uploadLocalUncommitsToClickhouse] remove:", filepath
+      await fsAsync.unlink(filepath)  # remove successfully commited local file
+    return
+
   # check if to commit disk file to clickhouse DB
   exam : ->
     try
@@ -299,14 +344,15 @@ class Cargo # extends EventEmitter
     filenamList = filenamList.map (item)=> path.join(@pathToCargoFolder, item)
 
     # submit each local uncommit sequentially
-    for filepath in filenamList
-      try
-        res = await @uploadCargoFile(filepath)
-        debuglog "[commitToClickhouseDB] res.headers: #{JSON.stringify(res.headers)}"
-        await fsAsync.unlink(filepath)  # remove successfully commited local file
-      catch err
-        debuglog "[commitToClickhouseDB] FAIL to commit:#{filepath}, error:", err
-        err.filepath = filepath
+    @uploadLocalUncommitsToClickhouse(filenamList)
+    #for filepath in filenamList
+      #try
+        #res = await @uploadCargoFile(filepath)
+        #debuglog "[commitToClickhouseDB] res.headers: #{JSON.stringify(res.headers)}"
+        #await fsAsync.unlink(filepath)  # remove successfully commited local file
+      #catch err
+        #debuglog "[commitToClickhouseDB] FAIL to commit:#{filepath}, error:", err
+        #err.filepath = filepath
         #@emit 'error', err
 
     #@_isCommiting = false  # lock release
