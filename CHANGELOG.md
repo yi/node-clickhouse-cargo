@@ -1,4 +1,8 @@
 
+2021/6/24 Version: 3.1.1
+===
+ 1. Reduce unnecessary log.
+
 2021/6/24 Version: 3.1.0
 ===
  1. Cargo: now submits multiple(up to config.maxInsetParts) local uncommits in one http post request. This change solves "Too many parts" error on clickhouse server side.
