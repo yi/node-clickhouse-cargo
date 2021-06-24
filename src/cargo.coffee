@@ -316,7 +316,7 @@ class Cargo # extends EventEmitter
     #debuglog "[commitToClickhouseDB > readdir] filenamList:", filenamList
 
     unless Array.isArray(filenamList) and (filenamList.length > 0)
-      debuglog "[commitToClickhouseDB] CANCLE empty filenamList"
+      #debuglog "[commitToClickhouseDB] CANCLE empty filenamList"
       #@_isCommiting = false  # lock release
       return
 
