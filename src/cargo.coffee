@@ -11,6 +11,7 @@ assert = require "assert"
 CLUSTER_WORKER_ID = if cluster.isMaster then "nocluster" else cluster.worker.id
 debuglog = require("debug")("chcargo:cargo@#{CLUSTER_WORKER_ID}")
 url = require('url')
+MultiStream = require('multistream')
 
 #pipeline = promisify(stream.pipeline)
 
@@ -181,6 +182,7 @@ class Cargo # extends EventEmitter
 
   # upload multiple local uncommits to clickhouse
   uploadLocalUncommitsToClickhouse : (filenamList)->
+    debuglog "[uploadLocalUncommitsToClickhouse] filenamList:", filenamList and filenamList.length
     return unless Array.isArray(filenamList) and filenamList.length > 0
 
     proc = (resolve, reject)=>
@@ -189,7 +191,7 @@ class Cargo # extends EventEmitter
           reject(new Error("ClickHouse server response statusCode:#{res and res.statusCode}"))
           return
 
-        debuglog "[uploadLocalUncommitsToClickhouse] SUCCESS uploaded #{filenamList.length} uncommits, res.headers:", res.headers
+        debuglog "[uploadLocalUncommitsToClickhouse] SUCCESS uploaded #{filenamList.length} uncommits, x-clickhouse-query-id:", (res.headers and  res.headers['x-clickhouse-query-id']), ", x-clickhouse-summary:", (res.headers and res.headers['x-clickhouse-summary'])
         resolve(res)
         return
 
@@ -205,22 +207,25 @@ class Cargo # extends EventEmitter
 
       req.write(@statement)
 
-      for filepath in filenamList
-        try
-          debuglog "[uploadLocalUncommitsToClickhouse] uploading:", filepath
-          srcStream = fs.createReadStream(filepath)
-          srcStream.pipe(req)
-        catch err
-          reject(err)
-          return
+      streams = filenamList.map (filepath)-> return fs.createReadStream(filepath)
+      new MultiStream(streams).pipe(req)
+
+      #for filepath in filenamList
+        #try
+          #debuglog "[uploadLocalUncommitsToClickhouse] uploading:", filepath
+          #srcStream = fs.createReadStream(filepath)
+          #srcStream.pipe(req)
+        #catch err
+          #reject(err)
+          #return
 
       return
 
     await new Promise(proc)
 
     for filepath in filenamList
-      debuglog "[uploadLocalUncommitsToClickhouse] remove:", filepath
-      await fsAsync.unlink(filepath)  # remove successfully commited local file
+      debuglog "[uploadLocalUncommitsToClickhouse] clean local commit:", path.basename(filepath)
+      await fsAsync.unlink(filepath)  # remove successfully committed local files
     return
 
   # check if to commit disk file to clickhouse DB
@@ -321,7 +326,7 @@ class Cargo # extends EventEmitter
       return item.startsWith(rotationPrefix) and item.endsWith(EXTNAME_UNCOMMITTED)
 
     unless filenamList.length > 0
-      debuglog "[commitToClickhouseDB > ls] CANCLE empty valid filenamList"
+      #debuglog "[commitToClickhouseDB > ls] CANCLE empty valid filenamList"
       #@_isCommiting = false  # lock release
       return
 
@@ -334,11 +339,11 @@ class Cargo # extends EventEmitter
       tsB = parseInt((b.split(splitMark) || [])[1] || 0, 36)
       #debuglog "[commitToClickhouseDB] tsA:#{tsA} tsB:#{tsB}"
       return tsB - tsA
-    debuglog "[commitToClickhouseDB] AFTER SORT filenamList(#{filenamList.length})" #, filenamList
+    #debuglog "[commitToClickhouseDB] AFTER SORT filenamList(#{filenamList.length})" #, filenamList
 
     # truncate filenamList if too long
     filenamList.length = Math.min(filenamList.length,  @maxInsetParts)
-    debuglog "[commitToClickhouseDB] AFTER SORT filenamList(#{filenamList.length})" #, filenamList
+    #debuglog "[commitToClickhouseDB] after truncate filenamList(#{filenamList.length})" #, filenamList
 
     # padding full file path
     filenamList = filenamList.map (item)=> path.join(@pathToCargoFolder, item)

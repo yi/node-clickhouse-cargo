@@ -1,6 +1,12 @@
+
+2021/6/24 Version: 3.1.0
+===
+ 1. Cargo: now submits multiple(up to config.maxInsetParts) local uncommits in one http post request. This change solves "Too many parts" error on clickhouse server side.
+    Note: use multistream to avoid memory leak when hundred of readable stream piping to the upload request.
+
 2021/4/12 Version: 3.0.5
 ===
- 1. Cargo no longer extends EventEmitter
+ 1. Cargo: no longer extends EventEmitter
 
 2021/4/12 Version: 3.0.3
 ===
