@@ -5,6 +5,7 @@
   "main": "lib/index.js",
   "scripts": {
     "watch": "./node_modules/.bin/coffee -o ./lib/ -cw ./src/",
+    "chk-ck-files": "node ./lib/scripts/exam_cargo_files.js",
     "test01": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/01-create-cargo.js -R spec",
     "test02": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/02-push-to-cargo.js -R spec",
     "test03": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/03-commit-bulk.js -R spec",
