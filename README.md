@@ -70,6 +70,13 @@ for (let i =0, i < NUM_OF_INSERTIONS, i++){
 }
 ```
 
+### Usage examples
+
+This cargo module is designed for inserting large number of records in a few batches. Thus it will helpful to have some sort of insertion generator/validation.
+
+I'd used [Joi](https://joi.dev/api/) for a while, and found it consumed too much cpu power, and [here is an example of how we are currently using the cargo module](https://github.com/yi/node-clickhouse-cargo/issues/1#issuecomment-1005407802)
+
+
 ## API
 
 ### Initialization
