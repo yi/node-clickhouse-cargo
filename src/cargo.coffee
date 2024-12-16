@@ -10,7 +10,8 @@ debuglog = require("debug")("chcargo:cargo@#{CLUSTER_WORKER_ID}")
 url = require('url')
 MultiStream = require('multistream')
 
-# to support node -v < 14
+# TODO: Consider using fs.promises instead of manually promisifying for Node.js >= 10
+# This would make the code more maintainable and future-proof
 fsAsync =
   rename : promisify(fs.rename)
   unlink : promisify(fs.unlink)
@@ -20,6 +21,8 @@ fsAsync =
 
 #debuglog "[static init] fsAsync:", fsAsync
 
+# TODO: Consider moving these constants to a separate config file
+# This would make it easier to modify settings without touching core code
 FILENAME_PREFIX = "cargo_"
 
 EXTNAME_UNCOMMITTED = ".uncommitted"
@@ -34,6 +37,7 @@ DEFAULT_COMMIT_INTERVAL = 5000
 
 DEFAULT_MAX_INSET_PARTS = 100
 
+# TODO: Consider using UUID instead of simple counter to avoid collisions
 StaticCountWithinProcess = 0
 
 CLICKHOUSE_SETTINGS = wait_end_of_query: 1
@@ -51,6 +55,7 @@ class Cargo
   #   @param {Number} [options.maxInsetParts=100] - Max number of files to combine in one insert
   # @param {Object} [clickhouseClient] - Clickhouse client instance
   constructor: (@tableName, options = {}, clickhouseClient) ->
+    # TODO: Consider adding validation for tableName format
     # Validate and normalize options with sensible defaults
     @maxTime = Math.max(parseInt(options.maxTime) or MIN_TIME, MIN_TIME)
     @maxRows = Math.max(parseInt(options.maxRows) or MIN_ROWS, MIN_ROWS)
@@ -65,11 +70,7 @@ class Cargo
     @pathToCargoFolder = options.pathToCargoFolder
     @pathToCargoFile = path.join(@pathToCargoFolder, FILENAME_PREFIX + @tableName)
 
-    # @httpPostOptions = cargoOptionToHttpOption(options, {
-    #   path: '/?wait_end_of_query=1'
-    #   method: 'POST'
-    # })
-
+    # TODO: Consider adding retry mechanism for failed inserts
     @clickhouseClient = clickhouseClient
 
     debuglog "[new Cargo] @tableName:#{@tableName}, @maxTime:#{@maxTime}, @maxRows:#{@maxRows}, @commitInterval:#{@commitInterval}, @pathToCargoFile:#{@pathToCargoFile}"
@@ -81,6 +82,7 @@ class Cargo
     @countRotation = 0
     return
 
+  # TODO: Consider adding batch push method for better performance
   # push row insert into memory cache
   push : ->
     arr = Array.from(arguments)
@@ -126,6 +128,7 @@ class Cargo
     @_isFlushing = false
     return
 
+  # TODO: Consider removing sync methods as they can block the event loop
   # flush memory cache to the disk file
   flushSync : ->
     unless @cachedRows.length > 0
@@ -137,40 +140,6 @@ class Cargo
     debuglog("#{@} [flushSync] #{rowsToFlush.length} rows")
     fs.appendFileSync(@pathToCargoFile, rowsToFlush.join("\n")+"\n")
     return
-
-  # uploadCargoFile : (filepath)->
-  #   debuglog "[uploadCargoFile #{@tableName}] filepath:", filepath
-  #   proc = (resolve, reject)=>
-  #     try
-  #       srcStream = fs.createReadStream(filepath)
-  #     catch err
-  #       reject(err)
-  #       return
-
-  #     req = @vehicle.request @httpPostOptions, (res)=>
-  #       unless res and res.statusCode is 200
-  #         reject(new Error("ClickHouse server response statusCode:#{res and res.statusCode}"))
-  #         return
-
-  #       #debuglog "[uploadCargoFile] res.headers:", res.headers
-  #       resolve(res)
-  #       return
-
-  #     req.on 'error', (err)->
-  #       debuglog "[uploadCargoFile : on err:]", err
-  #       reject(err)
-  #       return
-
-  #     req.on 'timeout', ->
-  #       debuglog "[uploadCargoFile : on timeout]"
-  #       req.destroy(new Error('request timeout'))
-  #       return
-
-  #     req.write(@statement)
-  #     srcStream.pipe(req)
-  #     return
-
-  #   return new Promise(proc)
 
   # upload a single cargo file to clickhouse
   uploadCargoFile : (filepath)->
@@ -189,42 +158,22 @@ class Cargo
     debuglog "[uploadLocalUncommitsToClickhouse] filenamList:", filenamList and filenamList.length
     return unless Array.isArray(filenamList) and filenamList.length > 0
 
-    # proc = (resolve, reject)=>
-    #   req = @vehicle.request @httpPostOptions, (res)=>
-    #     unless res and res.statusCode is 200
-    #       reject(new Error("ClickHouse server response statusCode:#{res and res.statusCode}"))
-    #       return
+    copyOfFilenamList = filenamList.slice()
 
-    #     debuglog "[uploadLocalUncommitsToClickhouse] SUCCESS uploaded #{filenamList.length} uncommits, x-clickhouse-query-id:", (res.headers and  res.headers['x-clickhouse-query-id']), ", x-clickhouse-summary:", (res.headers and res.headers['x-clickhouse-summary'])
-    #     resolve(res)
-    #     return
+    # Create a single combined readable stream from multiple files
+    combinedStream = new MultiStream (cb) ->
+      if copyOfFilenamList.length == 0
+        return cb(null, null) # End of streams
 
-    #   req.on 'error', (err)->
-    #     debuglog "[uploadLocalUncommitsToClickhouse : on err:]", err
-    #     reject(err)
-    #     return
+      filepath = copyOfFilenamList.shift()
+      debuglog "[uploadLocalUncommitsToClickhouse] upload file:", filepath
+      cb(null, fs.createReadStream(filepath))
 
-    #   req.on 'timeout', ->
-    #     debuglog "[uploadLocalUncommitsToClickhouse : on timeout]"
-    #     req.destroy(new Error('request timeout'))
-    #     return
-
-    #   req.write(@statement)
-
-    #   streams = filenamList.map (filepath)-> return fs.createReadStream(filepath)
-    #   new MultiStream(streams).pipe(req)
-
-    #   return
-
-    # await new Promise(proc)
-
-    streams = filenamList.map (filepath)-> return fs.createReadStream(filepath)
-    new MultiStream(streams).pipe(req)
-
+    # TODO: Fix potential memory leak - req is not defined
     await @clickhouseClient.insert({
       table: @tableName,
       format: 'JSONCompactEachRow',
-      values: streams
+      values: combinedStream
       clickhouse_settings : CLICKHOUSE_SETTINGS
     })
 
@@ -360,4 +309,3 @@ class Cargo
     return
 
 module.exports = Cargo
-
