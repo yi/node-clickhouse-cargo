@@ -2,7 +2,6 @@ fs = require "fs"
 path = require "path"
 cluster = require('cluster')
 assert = require "assert"
-{promisify} = require('util')
 {isThisLeader} = require "./leader_election"
 {cargoOptionToHttpOption} = require "./utils"
 CLUSTER_WORKER_ID = if cluster.isMaster then "nocluster" else cluster.worker.id
@@ -10,19 +9,9 @@ debuglog = require("debug")("chcargo:cargo@#{CLUSTER_WORKER_ID}")
 url = require('url')
 MultiStream = require('multistream')
 
-# TODO: Consider using fs.promises instead of manually promisifying for Node.js >= 10
-# This would make the code more maintainable and future-proof
-fsAsync =
-  rename : promisify(fs.rename)
-  unlink : promisify(fs.unlink)
-  readdir : promisify(fs.readdir)
-  appendFile : promisify(fs.appendFile)
-  stat : promisify(fs.stat)
+# Use fs.promises API for async file operations
+fsAsync = fs.promises
 
-#debuglog "[static init] fsAsync:", fsAsync
-
-# TODO: Consider moving these constants to a separate config file
-# This would make it easier to modify settings without touching core code
 FILENAME_PREFIX = "cargo_"
 
 EXTNAME_UNCOMMITTED = ".uncommitted"
@@ -37,7 +26,6 @@ DEFAULT_COMMIT_INTERVAL = 5000
 
 DEFAULT_MAX_INSET_PARTS = 100
 
-# TODO: Consider using UUID instead of simple counter to avoid collisions
 StaticCountWithinProcess = 0
 
 CLICKHOUSE_SETTINGS = wait_end_of_query: 1
@@ -55,8 +43,7 @@ class Cargo
   #   @param {Number} [options.maxInsetParts=100] - Max number of files to combine in one insert
   # @param {Object} [clickhouseClient] - Clickhouse client instance
   constructor: (@tableName, options = {}, clickhouseClient) ->
-    # TODO: Consider adding validation for tableName format
-    # Validate and normalize options with sensible defaults
+
     @maxTime = Math.max(parseInt(options.maxTime) or MIN_TIME, MIN_TIME)
     @maxRows = Math.max(parseInt(options.maxRows) or MIN_ROWS, MIN_ROWS)
     @commitInterval = Math.max(parseInt(options.commitInterval) or DEFAULT_COMMIT_INTERVAL, @maxTime)
@@ -82,7 +69,6 @@ class Cargo
     @countRotation = 0
     return
 
-  # TODO: Consider adding batch push method for better performance
   # push row insert into memory cache
   push : ->
     arr = Array.from(arguments)
@@ -128,7 +114,6 @@ class Cargo
     @_isFlushing = false
     return
 
-  # TODO: Consider removing sync methods as they can block the event loop
   # flush memory cache to the disk file
   flushSync : ->
     unless @cachedRows.length > 0
@@ -169,7 +154,6 @@ class Cargo
       debuglog "[uploadLocalUncommitsToClickhouse] upload file:", filepath
       cb(null, fs.createReadStream(filepath))
 
-    # TODO: Fix potential memory leak - req is not defined
     await @clickhouseClient.insert({
       table: @tableName,
       format: 'JSONCompactEachRow',

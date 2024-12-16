@@ -165,7 +165,7 @@ setTimeout((-> await examCargos()), 100)
 module.exports =
   init : init
   createCargo : createCargo
-  isInited : -> return not not (CargoOptions and CargoOptions.host)
+  isInited : -> return not not ClickhouseClient
 
 
 

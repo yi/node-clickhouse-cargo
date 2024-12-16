@@ -2,11 +2,11 @@
 assert = require ("assert")
 
 
-INIT_OPTION =
-  host : "localhost"
-  maxTime : 2000
-  maxRows : 100
-  commitInterval : 8000
+#INIT_OPTION =
+  #host : "localhost"
+  #maxTime : 2000
+  #maxRows : 100
+  #commitInterval : 8000
 
 QUERY = "test.cargo0"
 QUERY1 = "test.cargo1"
