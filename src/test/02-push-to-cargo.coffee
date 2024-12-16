@@ -3,16 +3,16 @@ debuglog = require("debug")("chcargo:test:02")
 {
   createCargo
   isInited
+  getClickhouseClient
 } = require "../"
 assert = require ("assert")
 fs = require "fs"
 os = require "os"
 path = require "path"
 _ = require "lodash"
-ClickHouse = require('@apla/clickhouse')
 {sleep} = require "../utils"
 
-TABLE_NAME = "cargo_test.unittest02"
+TABLE_NAME = "default.unittest02" # Changed from cargo_test.unittest02 to use default database
 
 STATEMENT_INSERT = "INSERT INTO #{TABLE_NAME}"
 
@@ -30,13 +30,17 @@ ENGINE = Memory()
 STATEMENT_CREATE_TABLE = STATEMENT_CREATE_TABLE.replace(/\n|\r/g, ' ')
 
 # refer
-INIT_OPTION =
-  host : "localhost"
-  maxTime : 2000
-  maxRows : 100
-  commitInterval : 20000
+#INIT_OPTION =
+  #host : "localhost"
+  #maxTime : 2000
+  #maxRows : 100
+  #commitInterval : 20000
 
 NUM_OF_LINE = 429 # NOTE: bulk flushs every 100 lines
+
+before ->
+  client = getClickhouseClient()
+  await client.exec({query: STATEMENT_CREATE_TABLE})
 
 describe "push log to cargo and flush manully", ->
   @timeout(20000)
@@ -107,5 +111,3 @@ describe "push log to cargo and flush automatically", ->
 
     done()
     return
-
-

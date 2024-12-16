@@ -166,6 +166,7 @@ module.exports =
   init : init
   createCargo : createCargo
   isInited : -> return not not ClickhouseClient
+  getClickhouseClient : -> ClickhouseClient
 
 
 

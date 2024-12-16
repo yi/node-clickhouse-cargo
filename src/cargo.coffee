@@ -8,6 +8,9 @@ CLUSTER_WORKER_ID = if cluster.isMaster then "nocluster" else cluster.worker.id
 debuglog = require("debug")("chcargo:cargo@#{CLUSTER_WORKER_ID}")
 url = require('url')
 MultiStream = require('multistream')
+{Readable} = require('stream')
+merge2 = require('merge2')
+{createInterface} = require('readline')
 
 # Use fs.promises API for async file operations
 fsAsync = fs.promises
@@ -137,7 +140,6 @@ class Cargo
       clickhouse_settings : CLICKHOUSE_SETTINGS
     })
 
-
   # upload multiple local uncommits to clickhouse
   uploadLocalUncommitsToClickhouse : (filenamList)->
     debuglog "[uploadLocalUncommitsToClickhouse] filenamList:", filenamList and filenamList.length
@@ -145,14 +147,30 @@ class Cargo
 
     copyOfFilenamList = filenamList.slice()
 
-    # Create a single combined readable stream from multiple files
-    combinedStream = new MultiStream (cb) ->
-      if copyOfFilenamList.length == 0
-        return cb(null, null) # End of streams
+    # Create streams that read lines and parse JSON
+    listOfFileStreams = filenamList.map((filepath) ->
+      fileStream = fs.createReadStream(filepath, {encoding: 'utf8'})
+      lineStream = createInterface({
+        input: fileStream,
+        crlfDelay: Infinity
+      })
 
-      filepath = copyOfFilenamList.shift()
-      debuglog "[uploadLocalUncommitsToClickhouse] upload file:", filepath
-      cb(null, fs.createReadStream(filepath))
+      # Transform line stream into object stream
+      objectStream = new (require('stream').Transform)({
+        objectMode: true,
+        transform: (line, encoding, callback) ->
+          try
+            obj = JSON.parse(line)
+            callback(null, obj)
+          catch err
+            callback(err)
+      })
+
+      lineStream.pipe(objectStream)
+      return objectStream
+    )
+
+    combinedStream = merge2(listOfFileStreams..., {objectMode: true})
 
     await @clickhouseClient.insert({
       table: @tableName,
@@ -165,7 +183,6 @@ class Cargo
       debuglog "[uploadLocalUncommitsToClickhouse] clean local commit:", path.basename(filepath)
       await fsAsync.unlink(filepath)  # remove successfully committed local files
     return
-
   # check if to commit disk file to clickhouse DB
   exam : ->
     try
