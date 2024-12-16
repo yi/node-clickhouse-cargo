@@ -1,10 +1,7 @@
 fs = require "fs"
-os = require "os"
 path = require "path"
-qs   = require ('querystring')
 cluster = require('cluster')
 assert = require "assert"
-#EventEmitter = require('events')
 {promisify} = require('util')
 {isThisLeader} = require "./leader_election"
 {cargoOptionToHttpOption} = require "./utils"
@@ -12,8 +9,6 @@ CLUSTER_WORKER_ID = if cluster.isMaster then "nocluster" else cluster.worker.id
 debuglog = require("debug")("chcargo:cargo@#{CLUSTER_WORKER_ID}")
 url = require('url')
 MultiStream = require('multistream')
-
-#pipeline = promisify(stream.pipeline)
 
 # to support node -v < 14
 fsAsync =
@@ -29,8 +24,6 @@ FILENAME_PREFIX = "cargo_"
 
 EXTNAME_UNCOMMITTED = ".uncommitted"
 
-NOOP = -> return
-
 MAX_COMMIT_PER_EXAM_ROUTINE = 1
 
 MIN_TIME = 1000
@@ -43,46 +36,45 @@ DEFAULT_MAX_INSET_PARTS = 100
 
 StaticCountWithinProcess = 0
 
-class Cargo # extends EventEmitter
+CLICKHOUSE_SETTINGS = wait_end_of_query: 1
+
+
+class Cargo
   toString : -> "[Cargo #{@tableName}]"
 
-  # @param SQLInsertString tableName
-  # @param Object options:
-  #                     .pathToCargoFolder
-  #                     .maxTime
-  #                     .maxRows
-  #                     .commitInterval
-  constructor: (@tableName, options={})->
-    #super()
-    @maxTime = parseInt(options.maxTime) || MIN_TIME
-    @maxTime = MIN_TIME if @maxTime < MIN_TIME
+  # @param SQLInsertString tableName - Name of the ClickHouse table to insert into
+  # @param Object options - Configuration options
+  #   @param {String} options.pathToCargoFolder - Path to folder for storing cargo files
+  #   @param {Number} [options.maxTime=1000] - Max time in ms before flushing cached rows
+  #   @param {Number} [options.maxRows=100] - Max number of rows to cache before flushing
+  #   @param {Number} [options.commitInterval=5000] - Interval in ms between commits to ClickHouse
+  #   @param {Number} [options.maxInsetParts=100] - Max number of files to combine in one insert
+  # @param {Object} [clickhouseClient] - Clickhouse client instance
+  constructor: (@tableName, options = {}, clickhouseClient) ->
+    # Validate and normalize options with sensible defaults
+    @maxTime = Math.max(parseInt(options.maxTime) or MIN_TIME, MIN_TIME)
+    @maxRows = Math.max(parseInt(options.maxRows) or MIN_ROWS, MIN_ROWS)
+    @commitInterval = Math.max(parseInt(options.commitInterval) or DEFAULT_COMMIT_INTERVAL, @maxTime)
+    @maxInsetParts = Math.max(parseInt(options.maxInsetParts) or DEFAULT_MAX_INSET_PARTS, 1)
 
-    @maxRows = parseInt(options.maxRows) || MIN_ROWS
-    @maxRows = MIN_ROWS if @maxRows < 1
-
-    @commitInterval = parseInt(options.commitInterval) || DEFAULT_COMMIT_INTERVAL
-    @commitInterval = DEFAULT_COMMIT_INTERVAL if @commitInterval < @maxTime
-
-    @maxInsetParts = parseInt(options.maxInsetParts) || DEFAULT_MAX_INSET_PARTS
-    @maxInsetParts = DEFAULT_MAX_INSET_PARTS unless @maxInsetParts > 0
-
-    #@statement = "INSERT INTO #{@tableName} FORMAT JSONCompactEachRow\n"
+    # Set up ClickHouse insert statement
     @statement = "INSERT INTO #{@tableName} FORMAT JSONCompactEachRow "
 
-    assert options.pathToCargoFolder, "missing options.pathToCargoFolder"
+    # Configure paths and HTTP options
+    assert options.pathToCargoFolder, "missing required option: pathToCargoFolder"
     @pathToCargoFolder = options.pathToCargoFolder
     @pathToCargoFile = path.join(@pathToCargoFolder, FILENAME_PREFIX + @tableName)
-    @httpPostOptions = cargoOptionToHttpOption(options, {path: '/?wait_end_of_query=1', method:'POST'})
-    @vehicle = options.vehicle
+
+    # @httpPostOptions = cargoOptionToHttpOption(options, {
+    #   path: '/?wait_end_of_query=1'
+    #   method: 'POST'
+    # })
+
+    @clickhouseClient = clickhouseClient
 
     debuglog "[new Cargo] @tableName:#{@tableName}, @maxTime:#{@maxTime}, @maxRows:#{@maxRows}, @commitInterval:#{@commitInterval}, @pathToCargoFile:#{@pathToCargoFile}"
 
-    # verify cargo can write to the destination folder
-    fs.access @pathToCargoFolder, fs.constants.W_OK, (err)->
-      if err?
-        throw new Error "Cargo not able to write to folder #{@pathToCargoFolder}. Due to #{err}"
-      return
-
+    # Initialize state
     @cachedRows = []
     @lastFlushAt = Date.now()
     @lastCommitAt = Date.now()
@@ -134,6 +126,7 @@ class Cargo # extends EventEmitter
     @_isFlushing = false
     return
 
+  # flush memory cache to the disk file
   flushSync : ->
     unless @cachedRows.length > 0
       debuglog "#{@} [flushSync] nothing to flush"
@@ -145,39 +138,50 @@ class Cargo # extends EventEmitter
     fs.appendFileSync(@pathToCargoFile, rowsToFlush.join("\n")+"\n")
     return
 
+  # uploadCargoFile : (filepath)->
+  #   debuglog "[uploadCargoFile #{@tableName}] filepath:", filepath
+  #   proc = (resolve, reject)=>
+  #     try
+  #       srcStream = fs.createReadStream(filepath)
+  #     catch err
+  #       reject(err)
+  #       return
+
+  #     req = @vehicle.request @httpPostOptions, (res)=>
+  #       unless res and res.statusCode is 200
+  #         reject(new Error("ClickHouse server response statusCode:#{res and res.statusCode}"))
+  #         return
+
+  #       #debuglog "[uploadCargoFile] res.headers:", res.headers
+  #       resolve(res)
+  #       return
+
+  #     req.on 'error', (err)->
+  #       debuglog "[uploadCargoFile : on err:]", err
+  #       reject(err)
+  #       return
+
+  #     req.on 'timeout', ->
+  #       debuglog "[uploadCargoFile : on timeout]"
+  #       req.destroy(new Error('request timeout'))
+  #       return
+
+  #     req.write(@statement)
+  #     srcStream.pipe(req)
+  #     return
+
+  #   return new Promise(proc)
+
+  # upload a single cargo file to clickhouse
   uploadCargoFile : (filepath)->
     debuglog "[uploadCargoFile #{@tableName}] filepath:", filepath
-    proc = (resolve, reject)=>
-      try
-        srcStream = fs.createReadStream(filepath)
-      catch err
-        reject(err)
-        return
 
-      req = @vehicle.request @httpPostOptions, (res)=>
-        unless res and res.statusCode is 200
-          reject(new Error("ClickHouse server response statusCode:#{res and res.statusCode}"))
-          return
-
-        #debuglog "[uploadCargoFile] res.headers:", res.headers
-        resolve(res)
-        return
-
-      req.on 'error', (err)->
-        debuglog "[uploadCargoFile : on err:]", err
-        reject(err)
-        return
-
-      req.on 'timeout', ->
-        debuglog "[uploadCargoFile : on timeout]"
-        req.destroy(new Error('request timeout'))
-        return
-
-      req.write(@statement)
-      srcStream.pipe(req)
-      return
-
-    return new Promise(proc)
+    return await @clickhouseClient.insert({
+      table: @tableName,
+      format: 'JSONCompactEachRow',
+      values: fs.createReadStream(filepath)
+      clickhouse_settings : CLICKHOUSE_SETTINGS
+    })
 
 
   # upload multiple local uncommits to clickhouse
@@ -185,43 +189,44 @@ class Cargo # extends EventEmitter
     debuglog "[uploadLocalUncommitsToClickhouse] filenamList:", filenamList and filenamList.length
     return unless Array.isArray(filenamList) and filenamList.length > 0
 
-    proc = (resolve, reject)=>
-      req = @vehicle.request @httpPostOptions, (res)=>
-        unless res and res.statusCode is 200
-          reject(new Error("ClickHouse server response statusCode:#{res and res.statusCode}"))
-          return
+    # proc = (resolve, reject)=>
+    #   req = @vehicle.request @httpPostOptions, (res)=>
+    #     unless res and res.statusCode is 200
+    #       reject(new Error("ClickHouse server response statusCode:#{res and res.statusCode}"))
+    #       return
 
-        debuglog "[uploadLocalUncommitsToClickhouse] SUCCESS uploaded #{filenamList.length} uncommits, x-clickhouse-query-id:", (res.headers and  res.headers['x-clickhouse-query-id']), ", x-clickhouse-summary:", (res.headers and res.headers['x-clickhouse-summary'])
-        resolve(res)
-        return
+    #     debuglog "[uploadLocalUncommitsToClickhouse] SUCCESS uploaded #{filenamList.length} uncommits, x-clickhouse-query-id:", (res.headers and  res.headers['x-clickhouse-query-id']), ", x-clickhouse-summary:", (res.headers and res.headers['x-clickhouse-summary'])
+    #     resolve(res)
+    #     return
 
-      req.on 'error', (err)->
-        debuglog "[uploadLocalUncommitsToClickhouse : on err:]", err
-        reject(err)
-        return
+    #   req.on 'error', (err)->
+    #     debuglog "[uploadLocalUncommitsToClickhouse : on err:]", err
+    #     reject(err)
+    #     return
 
-      req.on 'timeout', ->
-        debuglog "[uploadLocalUncommitsToClickhouse : on timeout]"
-        req.destroy(new Error('request timeout'))
-        return
+    #   req.on 'timeout', ->
+    #     debuglog "[uploadLocalUncommitsToClickhouse : on timeout]"
+    #     req.destroy(new Error('request timeout'))
+    #     return
 
-      req.write(@statement)
+    #   req.write(@statement)
 
-      streams = filenamList.map (filepath)-> return fs.createReadStream(filepath)
-      new MultiStream(streams).pipe(req)
+    #   streams = filenamList.map (filepath)-> return fs.createReadStream(filepath)
+    #   new MultiStream(streams).pipe(req)
 
-      #for filepath in filenamList
-        #try
-          #debuglog "[uploadLocalUncommitsToClickhouse] uploading:", filepath
-          #srcStream = fs.createReadStream(filepath)
-          #srcStream.pipe(req)
-        #catch err
-          #reject(err)
-          #return
+    #   return
 
-      return
+    # await new Promise(proc)
 
-    await new Promise(proc)
+    streams = filenamList.map (filepath)-> return fs.createReadStream(filepath)
+    new MultiStream(streams).pipe(req)
+
+    await @clickhouseClient.insert({
+      table: @tableName,
+      format: 'JSONCompactEachRow',
+      values: streams
+      clickhouse_settings : CLICKHOUSE_SETTINGS
+    })
 
     for filepath in filenamList
       debuglog "[uploadLocalUncommitsToClickhouse] clean local commit:", path.basename(filepath)
@@ -350,15 +355,6 @@ class Cargo # extends EventEmitter
 
     # submit each local uncommit sequentially
     @uploadLocalUncommitsToClickhouse(filenamList)
-    #for filepath in filenamList
-      #try
-        #res = await @uploadCargoFile(filepath)
-        #debuglog "[commitToClickhouseDB] res.headers: #{JSON.stringify(res.headers)}"
-        #await fsAsync.unlink(filepath)  # remove successfully commited local file
-      #catch err
-        #debuglog "[commitToClickhouseDB] FAIL to commit:#{filepath}, error:", err
-        #err.filepath = filepath
-        #@emit 'error', err
 
     #@_isCommiting = false  # lock release
     return

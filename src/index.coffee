@@ -7,7 +7,7 @@ http = require ('http')
 https = require('https')
 cluster = require('cluster')
 { cargoOptionToHttpOption } = require "./utils"
-#{eachSeries} = require "async"
+{ createClient } = require '@clickhouse/client'
 
 CLUSTER_WORKER_ID = if cluster.isMaster then "nocluster" else cluster.worker.id
 debuglog = require("debug")("chcargo:index@#{CLUSTER_WORKER_ID}")
@@ -15,28 +15,45 @@ debuglog = require("debug")("chcargo:index@#{CLUSTER_WORKER_ID}")
 Cargo = require "./cargo"
 
 REG_INVALID_SQL_TABLE_NAME_CHAR = /[^\w\d\.\-_]/i
+
+# KV map: tableName -> cargo instance
 TABLE_NAME_TO_CARGO = {}
 
+# Global configuration options for all cargos
 CargoOptions = {}
 
+# Global Clickhouse client instance
+ClickhouseClient = null
+
 # @param Object config:
-#                     .pathToCargoFolder
-#                     .maxTime
-#                     .maxRows
-#                     .commitInterval
+#    .pathToCargoFolder String, the path to the folder where cargo files are stored. Default: "cargo_files"
+#    .maxTime Number, the max time in ms before flushing cached rows. Default: 10000
+#    .maxRows Number, the max number of rows to cache before flushing. Default: 100
+#    .commitInterval Number, the interval in ms between commits to ClickHouse. Default: 5000
+#    .maxInsetParts Number, the max number of files to combine in one insert. Default: 100
 init = (config)->
-  # config could be simply a string of clickhouse server host
-  config = host:config if typeof(config) is "string"
+  assert config, "missing host in config"
 
-  assert config and config.host, "missing host in config"
+  # refer to  https://clickhouse.com/docs/en/integrations/javascript
+  clickhouseClientOption =
+    url: config.url
+    pathname : config.pathname
+    request_timeout : config.request_timeout
+    compression : config.compression
+    username : config.username
+    password : config.password
+    application : config.application
+    database : config.database
+    log: config.log
+    http_headers : config.http_headers
+    roles : config.roles
+    max_open_connections : config.max_open_connections
+    tls : config.tls
+    keep_alive : config.keep_alive
+    set_basic_auth_header : config.set_basic_auth_header
 
-  #config = Object.assign({}, config)  # leave input obj unmodified
-  CargoOptions.host = config.host
-  CargoOptions.port = parseInt(config.port) || 8123
-  CargoOptions.user = config.user || "default"
-  CargoOptions.password = config.password if typeof(config.password) is "string"
-  CargoOptions.vehicle  = if String(config.protocol || '').toLowerCase() is 'https:' then https else http
-  CargoOptions.timeout  = config.timeout if config.timeout > 0 and Number.isInteger(config.timeout)
+  #debuglog "[init] clickhouseClientOption:", clickhouseClientOption
+  ClickhouseClient = createClient(clickhouseClientOption)
 
   # prepare disk path
   CargoOptions.pathToCargoFolder = path.resolve(process.cwd(), config.cargoPath || "cargo_files")
@@ -51,34 +68,18 @@ init = (config)->
 
   maxTime = parseInt(config.maxTime)
   CargoOptions.maxTime = maxTime if maxTime > 0
-  delete config.maxTime
 
   maxRows = parseInt(config.maxRows)
   CargoOptions.maxRows = maxRows if maxRows > 0
-  delete config.maxRows
 
   commitInterval = parseInt(config.commitInterval)
   CargoOptions.commitInterval = commitInterval if commitInterval > 0
-  delete config.commitInterval
 
   maxInsetParts = parseInt(config.maxInsetParts)
   CargoOptions.maxInsetParts = maxInsetParts if maxInsetParts > 0
-  delete config.maxInsetParts
-
   #debuglog "[init] CargoOptions:", CargoOptions
 
   isToFlushBeforeCrash = if config.saveWhenCrash is false then false else true
-  #debuglog "[init] config.saveWhenCrash:#{config.saveWhenCrash},  isToFlushBeforeCrash:", isToFlushBeforeCrash
-  delete config.saveWhenCrash
-
-  # pin the given ClickHouse server
-  CargoOptions.vehicle.get(cargoOptionToHttpOption(CargoOptions), ((res)->
-    #debuglog "[index] res:", res and res.headers and res.headers['x-clickhouse-summary']
-    assert res and (res.statusCode is 200), "FAILED to pin ClickHouse server. Server response unexpected status code:#{res and res.statusCode}"
-  )).on 'error', (err)->
-    debuglog "FAILED to pin ClickHouse server, error:", err
-    throw(err)
-    return
 
   if isToFlushBeforeCrash
     # flush in-memroy data when process crash
@@ -103,7 +104,8 @@ init = (config)->
 # @param tableName String, the name of ClickHouse table which data is inserted
 createCargo = (tableName)->
   debuglog "[createCargo] tableName:#{tableName}"
-  assert CargoOptions.host and CargoOptions.vehicle, "ClickHouse-Cargo needs to be inited first"
+  assert ClickhouseClient, "ClickHouse-Cargo needs to be inited first"
+
   tableName = String(tableName || "").trim()
   assert tableName and not REG_INVALID_SQL_TABLE_NAME_CHAR.test(tableName), "invalid tableName:#{tableName}"
 
@@ -112,7 +114,7 @@ createCargo = (tableName)->
     debuglog "[createCargo] reuse cargo@#{tableName}:", cargo.toString()
     return cargo
 
-  cargo = new Cargo(tableName, CargoOptions)
+  cargo = new Cargo(tableName, CargoOptions, ClickhouseClient)
   TABLE_NAME_TO_CARGO[tableName] = cargo
   debuglog "[createCargo] cargo@#{tableName}:", cargo.toString()
   return cargo
