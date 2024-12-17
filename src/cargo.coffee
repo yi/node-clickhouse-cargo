@@ -3,14 +3,11 @@ path = require "path"
 cluster = require('cluster')
 assert = require "assert"
 {isThisLeader} = require "./leader_election"
-{cargoOptionToHttpOption} = require "./utils"
 CLUSTER_WORKER_ID = if cluster.isMaster then "nocluster" else cluster.worker.id
 debuglog = require("debug")("chcargo:cargo@#{CLUSTER_WORKER_ID}")
-url = require('url')
-MultiStream = require('multistream')
-{Readable} = require('stream')
+{Readable, Transform} = require('stream')
 merge2 = require('merge2')
-{createInterface} = require('readline')
+split2 = require('split2')
 
 # Use fs.promises API for async file operations
 fsAsync = fs.promises
@@ -33,6 +30,8 @@ StaticCountWithinProcess = 0
 
 CLICKHOUSE_SETTINGS = wait_end_of_query: 1
 
+CLICKHOUSE_INPUT_FORMAT = 'JSONCompactEachRow'
+
 
 class Cargo
   toString : -> "[Cargo #{@tableName}]"
@@ -51,9 +50,6 @@ class Cargo
     @maxRows = Math.max(parseInt(options.maxRows) or MIN_ROWS, MIN_ROWS)
     @commitInterval = Math.max(parseInt(options.commitInterval) or DEFAULT_COMMIT_INTERVAL, @maxTime)
     @maxInsetParts = Math.max(parseInt(options.maxInsetParts) or DEFAULT_MAX_INSET_PARTS, 1)
-
-    # Set up ClickHouse insert statement
-    @statement = "INSERT INTO #{@tableName} FORMAT JSONCompactEachRow "
 
     # Configure paths and HTTP options
     assert options.pathToCargoFolder, "missing required option: pathToCargoFolder"
@@ -88,7 +84,7 @@ class Cargo
   # flush memory cache to the disk file
   # @param forced Boolean, is force to flush file
   flushToFile : (forced)->
-    #debuglog("#{@} [flushToFile] @_isFlushing:", @_isFlushing)
+    debuglog("#{@} [flushToFile] @_isFlushing:", @_isFlushing)
     return if @_isFlushing
 
     unless @cachedRows.length > 0
@@ -97,14 +93,14 @@ class Cargo
       return
 
     unless forced or (@cachedRows.length > @maxRows) or (Date.now() > @lastFlushAt + @maxTime)
-      #debuglog("#{@} [flushToFile] SKIP threshold not reach")
+      debuglog("#{@} [flushToFile] SKIP threshold not reach")
       return
 
     @_isFlushing = true
 
     rowsToFlush = @cachedRows
     @cachedRows = []
-    #debuglog("#{@} [flushToFile] -> #{rowsToFlush.length} rows")
+    debuglog("#{@} [flushToFile] -> #{rowsToFlush.length} rows")
 
     try
       await fsAsync.appendFile(@pathToCargoFile, rowsToFlush.join("\n")+"\n")
@@ -135,46 +131,25 @@ class Cargo
 
     return await @clickhouseClient.insert({
       table: @tableName,
-      format: 'JSONCompactEachRow',
+      format: CLICKHOUSE_INPUT_FORMAT
       values: fs.createReadStream(filepath)
       clickhouse_settings : CLICKHOUSE_SETTINGS
     })
 
   # upload multiple local uncommits to clickhouse
   uploadLocalUncommitsToClickhouse : (filenamList)->
-    debuglog "[uploadLocalUncommitsToClickhouse] filenamList:", filenamList and filenamList.length
+    debuglog "[uploadLocalUncommitsToClickhouse] filenamList #{filenamList.length} :", filenamList
     return unless Array.isArray(filenamList) and filenamList.length > 0
 
-    copyOfFilenamList = filenamList.slice()
-
-    # Create streams that read lines and parse JSON
-    listOfFileStreams = filenamList.map((filepath) ->
-      fileStream = fs.createReadStream(filepath, {encoding: 'utf8'})
-      lineStream = createInterface({
-        input: fileStream,
-        crlfDelay: Infinity
-      })
-
-      # Transform line stream into object stream
-      objectStream = new (require('stream').Transform)({
-        objectMode: true,
-        transform: (line, encoding, callback) ->
-          try
-            obj = JSON.parse(line)
-            callback(null, obj)
-          catch err
-            callback(err)
-      })
-
-      lineStream.pipe(objectStream)
-      return objectStream
-    )
+    listOfFileStreams = filenamList.map (filepath)->
+      fs.createReadStream(filepath, {encoding: 'utf8'}).pipe(split2(JSON.parse))
 
     combinedStream = merge2(listOfFileStreams..., {objectMode: true})
+    debuglog "[uploadLocalUncommitsToClickhouse] combinedStream  #{listOfFileStreams.length}"
 
     await @clickhouseClient.insert({
       table: @tableName,
-      format: 'JSONCompactEachRow',
+      format: CLICKHOUSE_INPUT_FORMAT
       values: combinedStream
       clickhouse_settings : CLICKHOUSE_SETTINGS
     })
@@ -182,7 +157,9 @@ class Cargo
     for filepath in filenamList
       debuglog "[uploadLocalUncommitsToClickhouse] clean local commit:", path.basename(filepath)
       await fsAsync.unlink(filepath)  # remove successfully committed local files
+
     return
+
   # check if to commit disk file to clickhouse DB
   exam : ->
     try

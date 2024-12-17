@@ -11,6 +11,8 @@ os = require "os"
 path = require "path"
 _ = require "lodash"
 {sleep} = require "../utils"
+{ rimraf, rimrafSync} = require('rimraf')
+{ mkdirp } = require('mkdirp')
 
 TABLE_NAME = "default.unittest02" # Changed from cargo_test.unittest02 to use default database
 
@@ -19,7 +21,7 @@ STATEMENT_INSERT = "INSERT INTO #{TABLE_NAME}"
 STATEMENT_DROP_TABLE = "DROP TABLE IF EXISTS #{TABLE_NAME}"
 
 STATEMENT_CREATE_TABLE = """
-CREATE TABLE IF NOT EXISTS #{TABLE_NAME}
+CREATE TABLE #{TABLE_NAME}
 (
   `time` DateTime ,
   `step`  UInt32,
@@ -29,24 +31,25 @@ ENGINE = Memory()
 """
 STATEMENT_CREATE_TABLE = STATEMENT_CREATE_TABLE.replace(/\n|\r/g, ' ')
 
-# refer
-#INIT_OPTION =
-  #host : "localhost"
-  #maxTime : 2000
-  #maxRows : 100
-  #commitInterval : 20000
-
 NUM_OF_LINE = 429 # NOTE: bulk flushs every 100 lines
 
 before ->
+  # clean up clickhouse table
   client = getClickhouseClient()
+  await client.exec({query: STATEMENT_DROP_TABLE})
   await client.exec({query: STATEMENT_CREATE_TABLE})
 
 describe "push log to cargo and flush manully", ->
   @timeout(20000)
 
   theCargo = createCargo(TABLE_NAME)
-  fs.unlinkSync(theCargo.pathToCargoFile) if fs.existsSync(theCargo.pathToCargoFile)  # clean up existing log
+  debuglog "pathToCargoFile:", theCargo.pathToCargoFile
+
+  # clean up cargo file
+  folderOfCargoFile = path.dirname(theCargo.pathToCargoFile)
+  rimrafSync(folderOfCargoFile)
+  mkdirp.sync(folderOfCargoFile)
+
   columnValueString = Date.now().toString(36)
 
   it "push to cargo and flush manully", ->
@@ -73,15 +76,23 @@ describe "push log to cargo and flush manully", ->
       assert line[1] is i, "unmatching field 1 "
       assert line[2] is columnValueString, "unmatching field 2 "
 
+    # clean up cargo file
+    rimrafSync(folderOfCargoFile)
+    mkdirp.sync(folderOfCargoFile)
+
     done()
     return
-
 
 describe "push log to cargo and flush automatically", ->
   @timeout(20000)
 
   theCargo = createCargo("#{TABLE_NAME}_set2")
-  fs.unlinkSync(theCargo.pathToCargoFile) if fs.existsSync(theCargo.pathToCargoFile)  # clean up existing log
+
+  # clean up cargo file
+  folderOfCargoFile = path.dirname(theCargo.pathToCargoFile)
+  rimrafSync(folderOfCargoFile)
+  mkdirp.sync(folderOfCargoFile)
+
   columnValueString = Date.now().toString(36)
 
   it "push to cargo and flush manully", ->
@@ -109,5 +120,12 @@ describe "push log to cargo and flush automatically", ->
       assert line[1] is i, "unmatching field 1 "
       assert line[2] is columnValueString, "unmatching field 2 "
 
+
+    # clean up cargo file
+    rimrafSync(folderOfCargoFile)
+    mkdirp.sync(folderOfCargoFile)
+
     done()
+
+    process.exit(0)
     return
