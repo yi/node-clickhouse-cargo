@@ -37,6 +37,7 @@ describe "init clickhouse_cargo", ->
     assert cargo4 isnt cargo3
 
     done()
+    process.exit(0)
     return
 
   return
