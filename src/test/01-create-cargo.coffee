@@ -1,26 +1,12 @@
 {createCargo, isInited, init} = require "../"
 assert = require ("assert")
 
-
-#INIT_OPTION =
-  #host : "localhost"
-  #maxTime : 2000
-  #maxRows : 100
-  #commitInterval : 8000
-
 QUERY = "test.cargo0"
 QUERY1 = "test.cargo1"
 
 describe "init clickhouse_cargo", ->
 
   cargo0 = null
-
-  #before (done)->
-    #init(INIT_OPTION)
-    #done()
-    #return
-
-  #after -> process.exit(0)
 
   it "auto init when env set", (done)->
     assert isInited(), "should auto init when env set"
