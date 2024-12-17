@@ -1,6 +1,7 @@
 {
   createCargo
   isInited
+  getClickhouseClient
 } = require "../"
 debuglog = require("debug")("chcargo:test:04")
 assert = require ("assert")
@@ -8,9 +9,11 @@ crypto = require('crypto')
 fs = require "fs"
 os = require "os"
 path = require "path"
-ClickHouse = require('@apla/clickhouse')
+{ rimraf, rimrafSync} = require('rimraf')
+{ mkdirp } = require('mkdirp')
+{sleep} = require "../utils"
 
-TABLE_NAME = "cargo_test.unittest04"
+TABLE_NAME = "default.unittest04"
 
 STATEMENT_CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS #{TABLE_NAME}
@@ -27,42 +30,38 @@ columnValueString = Date.now().toString(36)
 
 STATEMENT_DROP_TABLE = "DROP TABLE IF EXISTS #{TABLE_NAME}"
 
-STATEMENT_SELECT = "SELECT * FROM #{TABLE_NAME} WHERE pos_id='#{columnValueString}' LIMIT 100000 FORMAT JSONCompactEachRow "
+STATEMENT_SELECT = "SELECT * FROM #{TABLE_NAME} WHERE pos_id='#{columnValueString}' ORDER BY step;"
 
 NUM_OF_LINE = 339
 NUM_OF_FILES = 111
-SUM_ROWS = NUM_OF_LINE * NUM_OF_FILES
-
-getClickHouseClient = ()->
-  profileName = process.env.CLICKHOUSE_CARGO_PROFILE
-  assert profileName, "missing process.env.CLICKHOUSE_CARGO_PROFIL"
-  profileName += ".json" unless path.extname(profileName) is ".json"
-  pathToConfig = path.join(os.homedir(), ".clickhouse-cargo", profileName )
-  debuglog "[getClickHouseClient] try auto init from CLICKHOUSE_CARGO_PROFILE from #{pathToConfig}"
-  try
-    profileConfig = JSON.parse(fs.readFileSync(pathToConfig))
-  catch err
-    debuglog "[static init] FAILED error:", err
-  return new ClickHouse(profileConfig)
-
+TOTAL_ROWS = NUM_OF_LINE * NUM_OF_FILES
 
 describe "restore-local-rotations", ->
   @timeout(200000)
 
-  clickHouseClient = getClickHouseClient()
+  clickHouseClient = getClickhouseClient()
   theCargo = null
   theFilepath = null
 
-  before (done)->
-    clickHouseClient.query STATEMENT_DROP_TABLE, (err)->
-      throw(err) if err?
-      clickHouseClient.query(STATEMENT_CREATE_TABLE, done)
-      return
+  before ->
+    debuglog "[before]"
+
+    # clean up clickhouse table
+    client = getClickhouseClient()
+    await client.exec({query: STATEMENT_DROP_TABLE})
+    await client.exec({query: STATEMENT_CREATE_TABLE})
+
+    theCargo = createCargo(TABLE_NAME)
+
+    # clean up cargo file
+    folderOfCargoFile = path.dirname(theCargo.pathToCargoFile)
+    rimrafSync(folderOfCargoFile)
+    mkdirp.sync(folderOfCargoFile)
     return
 
   after -> process.exit(0)
 
-  it "prepare local rotations", (done)->
+  it "prepare local rotations", ->
     for j in [0...NUM_OF_FILES]
       try
         theFilepath = path.join(process.cwd(), "cargo_files", "cargo_#{TABLE_NAME}.#{(Date.now() + j).toString(36)}_unittest.nocluster.uncommitted")
@@ -80,41 +79,21 @@ describe "restore-local-rotations", ->
 
 
     theCargo = createCargo(TABLE_NAME)
-    setTimeout(done, 60000)   # wait for cargo.exam
+    await sleep 30 # wait file stream flush
     return
 
+  it "local bulks should be commit to ClickHouse", ->
+    client = getClickhouseClient()
+    resultSet = await client.query({query: STATEMENT_SELECT, format: 'JSON' })
+    result = await resultSet.json()
+    {data} = result
+    debuglog "[read db] data length:#{data.length}"
 
-  it "local bulks should be commit to ClickHouse", (done)->
-    rows = []
-    debuglog "[read db] select:", STATEMENT_SELECT
-    clickHouseClient.query STATEMENT_SELECT, {format:"JSONCompactEachRow"}, (err, result)->
-      if err?
-        done(err)
-        return
-
-      result = result.replace(/\n/g,",").trim().replace(/,$/,'')
-      result = "[ #{result} ]"
-      #console.dir result
-      result = JSON.parse(result)
-
-      debuglog "[read db] SUM_ROWS:#{SUM_ROWS} result:", result.length
-      #console.dir result, depth:10
-
-      assert result.length is SUM_ROWS, "unmatching row length local:#{SUM_ROWS}, remote:#{result.length}"
-      result.sort (a, b)-> return a[1] - b[1]
-
-      for row, i in result
-        #assert row[1] is i, "unmatching field 1 "
-        assert row[2] is  columnValueString, "unmatching field 2 "
-
-      done()
-      return
+    assert data.length is TOTAL_ROWS, "unmatching row length local:#{TOTAL_ROWS}, remote:#{result.length}"
+    for i in [0...TOTAL_ROWS]
+      #debuglog "[read db] i:#{i} data[i]:", data[i]
+      assert data[i].step is i, "unmatching field #{JSON.stringify(data[i])} "
     return
-
-  #it "local bulks should be cleaned", (done)->
-    #assert fs.existsSync(theFilepath) is false, "local bulks should be cleaned:#{theFilepath}"
-    #done()
-    #return
 
   return
 

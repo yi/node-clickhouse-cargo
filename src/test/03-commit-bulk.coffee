@@ -64,6 +64,7 @@ describe "commit bulk", ->
     mkdirp.sync(folderOfCargoFile)
     return
 
+  after -> process.exit(0)
 
   it "push to cargo", ->
     for i in [0...NUM_OF_LINE]
@@ -77,26 +78,6 @@ describe "commit bulk", ->
     done()
     return
 
-  #it "push to cargo", ->
-  #     result = result.replace(/\n/g,",").trim().replace(/,$/,'')
-  #     result = "[ #{result} ]"
-  #     console.dir result
-  #     result = JSON.parse(result)
-
-  #     debuglog "[read db] result:", result.length
-  #     console.dir result, depth:10
-
-  #     assert result.length is NUM_OF_LINE, "unmatching row length local:#{NUM_OF_LINE}, remote:#{result.length}"
-  #     result.sort (a, b)-> return a[1] - b[1]
-
-  #     for row, i in result
-  #       assert row[1] is i, "unmatching field 1 "
-  #       assert row[2] is columnValueString, "unmatching field 2 "
-
-  #     done()
-  #     return
-  #   return
-
   it "records should be written into remote ClickHouse server", ->
 
     client = getClickhouseClient()
@@ -108,7 +89,6 @@ describe "commit bulk", ->
     assert data.length is NUM_OF_LINE, "unmatching row length local:#{NUM_OF_LINE}, remote:#{result.length}"
     for i in [0...NUM_OF_LINE]
       assert data[i].step is i, "unmatching field #{JSON.stringify(data[i])} "
-    process.exit(0)
     return
 
   return

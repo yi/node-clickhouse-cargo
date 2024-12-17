@@ -39,6 +39,9 @@ before ->
   await client.exec({query: STATEMENT_DROP_TABLE})
   await client.exec({query: STATEMENT_CREATE_TABLE})
 
+
+after -> process.exit(0)
+
 describe "push log to cargo and flush manully", ->
   @timeout(20000)
 
@@ -126,6 +129,4 @@ describe "push log to cargo and flush automatically", ->
     mkdirp.sync(folderOfCargoFile)
 
     done()
-
-    process.exit(0)
     return

@@ -8,6 +8,8 @@ describe "init clickhouse_cargo", ->
 
   cargo0 = null
 
+  after -> process.exit(0)
+
   it "auto init when env set", (done)->
     assert isInited(), "should auto init when env set"
     done()
@@ -37,7 +39,6 @@ describe "init clickhouse_cargo", ->
     assert cargo4 isnt cargo3
 
     done()
-    process.exit(0)
     return
 
   return
