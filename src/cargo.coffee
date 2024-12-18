@@ -84,7 +84,7 @@ class Cargo
   # flush memory cache to the disk file
   # @param forced Boolean, is force to flush file
   flushToFile : (forced)->
-    debuglog("#{@} [flushToFile] @_isFlushing:", @_isFlushing)
+    # debuglog("#{@} [flushToFile] @_isFlushing:", @_isFlushing)
     return if @_isFlushing
 
     unless @cachedRows.length > 0
