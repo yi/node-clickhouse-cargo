@@ -20,6 +20,7 @@ clickhouse-cargo 适用于分布式的 NodeJS 服务向 Clickhouse 频繁插入�
 
 When running in cluster mode (such as [PM2 cluster deployment](https://pm2.keymetrics.io/docs/usage/cluster-mode/) ), all cargo workers will run through an election via udp communication @ 127.0.0.1:17888 to elect a leader worker. Then only the leader worker will carry on with file rotations and commitments.
 
+
 ## 工作原理
 
  1. `cargo` 实例接受 `push`方法所提交的插入请求，并将请求临时存放于内存中。
@@ -31,13 +32,16 @@ When running in cluster mode (such as [PM2 cluster deployment](https://pm2.keyme
 
 在集群模式下，所有的 cargo woker 将通过UDP通讯选举出一个领头的worker。 接着由这个领头的worker来负责文件缓存的滚动和提交到 Clickhouse 数据库。
 
+## NodeJS Version requirements / NodeJS 版本要求
 
-## Install
+[NodeJS Version: 18.x and above](https://clickhouse.com/docs/en/integrations/javascript#environment-requirements-nodejs)
+
+## Install / 安装
 ```
 $ npm install clickhouse-cargo
 ```
 
-## Usage
+## Usage / 使用
 
 ```javascript
 /*
@@ -52,13 +56,12 @@ ENGINE = Memory()`;
 */
 
 const clickhouse-cargo = require("clickhouse-cargo");
-const TABLE_NAME = `cargo_test.table_test`;
+const TABLE_NAME = `default.table_test`;
 const NUM_OF_INSERTIONS = 27891; // NOTE: bulk flushs every 100 lines
 
 // init clickhouse-cargo
 clickhouse-cargo.init({
-  "host":"play-api.clickhouse.tech",
-  "port":"8443",
+  "url":"https://play-api.clickhouse.tech:8443",
   "user":"playground",
   "password":"clickhouse"
 });
@@ -70,16 +73,16 @@ for (let i =0, i < NUM_OF_INSERTIONS, i++){
 }
 ```
 
-### Usage examples
+### Usage examples / 使用示例
 
 This cargo module is designed for inserting large number of records in a few batches. Thus it will helpful to have some sort of insertion generator/validation.
 
 I'd used [Joi](https://joi.dev/api/) for a while, and found it consumed too much cpu power, and [here is an example of how we are currently using the cargo module](https://github.com/yi/node-clickhouse-cargo/issues/1#issuecomment-1005407802)
 
 
-## API
+## API / 接口
 
-### Initialization
+### Initialization / 初始化
 
 __Init by code__
 
@@ -92,17 +95,13 @@ clickhouse-cargo.init(options: Options)
 
 |                  | required | default       | description
 | :--------------- | :------: | :------------ | :----------
-| `host`           | ✓        |               | Host to connect.
+| @clickhouse/client Configurations             |          |               |  https://clickhouse.com/docs/en/integrations/javascript#configuration
 | `cargoPath`      |          | `${cwd()}/cargo_files`              | Path to local cargo cache.
 | `maxTime`        |          |  1000         | For how long in milliseconds, a cargo will keep in-memory insert buffer before flushing it to file.
 | `maxRows`        |          |  100          | For how many rows a cargo will keep in-memory.
 | `commitInterval` |          |  5000         | Interval(ms) for cargo to commit to ClickHouse.
 | `maxInsetParts`  |          |  100          | For how many parts will be inserted into ClickHouse in a single exame routine. Keep value less then 300 to avoide `Too many parts` issue happend on clickhouse server-side
 | `saveWhenCrash`  |          |  true         | When `false`, cargos will not flushSync in-memory data when node process crashes.
-| `user`           |          |               | Authentication user.
-| `password`       |          |               | Authentication password.
-| `port`           |          | `8123`        | Server port number.
-| `protocol`       |          | `'http:'`     | `'https:'` or `'http:'`.
 
 
 __Init by the environment variable__
@@ -111,7 +110,7 @@ Init by the environment variable is recommended for real-world production.
 Clickhouse-cargo recognises `process.env.CLICKHOUSE_CARGO_PROFILE` and seeks the config json file from `~/.clickhouse-cargo/${process.env.CLICKHOUSE_CARGO_PROFILE}`
 
 
-### Create a Cargo instanse
+### Create a Cargo instance / 创建一个 Cargo 实例
 
 ```javascript
 /*
@@ -120,7 +119,7 @@ Clickhouse-cargo recognises `process.env.CLICKHOUSE_CARGO_PROFILE` and seeks the
 const cargo = clickhouse-cargo.createCargo(tableName);
 ```
 
-### Insert a row
+### Insert a row / 插入一行
 ```javascript
 /*
 Instead of inserting to Clickhouse directly, push row to the cargo. And the cargo will commit accumulated insertions to Clickhouse in batch.
