@@ -16,7 +16,7 @@ clickhouse-cargo 适用于分布式的 NodeJS 服务向 Clickhouse 频繁插入�
  3. In case of a Clickhouse commit failure, the cargo will retry the submission in the next round of its routine till the submission is successful.
  4. In case of the NodeJS process crash. in-memory inserts will be flushed immediately into the file cache.
 
-### Cluster mode support [Demo Code](lib/cluster-test/05-restore-bulks-when-cluster.js)
+### Cluster mode support [(Demo Code)](lib/cluster-test/05-restore-bulks-when-cluster.js)
 
 When running in cluster mode (such as [PM2 cluster deployment](https://pm2.keymetrics.io/docs/usage/cluster-mode/) ), all cargo workers will run through an election via udp communication @ 127.0.0.1:17888 to elect a leader worker. Then only the leader worker will carry on with file rotations and commitments.
 
@@ -28,7 +28,7 @@ When running in cluster mode (such as [PM2 cluster deployment](https://pm2.keyme
  4. 当向 Clickhouse 写入失败时，`cargo` 将会在下一轮检查周期中重试提交直到提交成功。
  5. 当本地的 NodeJS 进程奔溃时，内存中累积的插入请求会被同步写入对应的文件缓存。
 
-### 支持集群模式 [示例代码](lib/cluster-test/05-restore-bulks-when-cluster.js)
+### 支持集群模式 [(示例代码)](lib/cluster-test/05-restore-bulks-when-cluster.js)
 
 在集群模式下，所有的 cargo woker 将通过UDP通讯选举出一个领头的worker。 接着由这个领头的worker来负责文件缓存的滚动和提交到 Clickhouse 数据库。
 
