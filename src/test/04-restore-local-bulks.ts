@@ -1,12 +1,14 @@
-const { createCargo, getClickhouseClient } = require("../");
-const debuglog = require("debug")("chcargo:test:04");
-const assert = require("assert");
-const fs = require("fs");
-const os = require("os");
-const path = require("path");
-const { rimrafSync } = require('rimraf');
-const { mkdirp } = require('mkdirp');
-const { sleep } = require("../utils");
+import { createCargo, getClickhouseClient } from "../";
+import debug from "debug";
+import assert from "assert";
+import fs from "fs";
+import path from "path";
+import { rimrafSync } from 'rimraf';
+import { mkdirp } from 'mkdirp';
+import { sleep } from "../utils";
+import type { Cargo } from "../cargo";
+
+const debuglog = debug("chcargo:test:04");
 
 const TABLE_NAME = "default.unittest04";
 
@@ -33,14 +35,12 @@ const TOTAL_ROWS = NUM_OF_LINE * NUM_OF_FILES;
 describe("restore-local-rotations", function() {
   this.timeout(200000);
 
-  const clickHouseClient = getClickhouseClient();
-  let theCargo = null;
-  let theFilepath = null;
+  let theCargo: Cargo | null = null;
 
   before(async function() {
     debuglog("[before]");
     // clean up clickhouse table
-    const client = getClickhouseClient();
+    const client = getClickhouseClient()!;
     await client.exec({
       query: STATEMENT_DROP_TABLE
     });
@@ -61,7 +61,7 @@ describe("restore-local-rotations", function() {
   it("prepare local rotations", async function() {
     for (let j = 0; j < NUM_OF_FILES; j++) {
       try {
-        theFilepath = path.join(process.cwd(), "cargo_files", `cargo_${TABLE_NAME}.${(Date.now() + j).toString(36)}_unittest.nocluster.uncommitted`);
+        const theFilepath = path.join(process.cwd(), "cargo_files", `cargo_${TABLE_NAME}.${(Date.now() + j).toString(36)}_unittest.nocluster.uncommitted`);
         debuglog(`[prepare ${j}] theFilepath:`, theFilepath);
 
         let content = "";
@@ -75,21 +75,20 @@ describe("restore-local-rotations", function() {
         console.log("failed error:", err);
       }
     }
-    theCargo = createCargo(TABLE_NAME);
     await sleep(30); // wait file stream flush
   });
 
   it("local bulks should be commit to ClickHouse", async function() {
-    const client = getClickhouseClient();
+    const client = getClickhouseClient()!;
     const resultSet = await client.query({
       query: STATEMENT_SELECT,
       format: 'JSON'
     });
-    const result = await resultSet.json();
+    const result = await resultSet.json<{ step: number }>();
     const { data } = result;
 
     debuglog(`[read db] data length:${data.length}`);
-    assert(data.length === TOTAL_ROWS, `unmatching row length local:${TOTAL_ROWS}, remote:${result.length}`);
+    assert(data.length === TOTAL_ROWS, `unmatching row length local:${TOTAL_ROWS}, remote:${data.length}`);
 
     for (let i = 0; i < TOTAL_ROWS; i++) {
       assert(data[i].step === i, `unmatching field ${JSON.stringify(data[i])} `);

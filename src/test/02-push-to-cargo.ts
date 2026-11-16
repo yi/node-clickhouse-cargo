@@ -1,13 +1,15 @@
-const { createCargo, isInited, getClickhouseClient } = require('../');
-const debuglog = require('debug')('chcargo:test:02');
-const assert = require('assert');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const _ = require('lodash');
-const { sleep } = require('../utils');
-const { rimrafSync } = require('rimraf');
-const { mkdirp } = require('mkdirp');
+import { createCargo, isInited, getClickhouseClient } from '../';
+import debug from 'debug';
+import assert from 'assert';
+import fs from 'fs';
+import path from 'path';
+import _ from 'lodash';
+import { rimrafSync } from 'rimraf';
+import { mkdirp } from 'mkdirp';
+import { sleep } from '../utils';
+import type { Cargo } from '../cargo';
+
+const debuglog = debug('chcargo:test:02');
 
 const TABLE_NAME = 'default.unittest02'; // Changed from cargo_test.unittest02 to use default database
 const STATEMENT_DROP_TABLE = `DROP TABLE IF EXISTS ${TABLE_NAME}`;
@@ -25,7 +27,7 @@ const NUM_OF_LINE = 429; // NOTE: bulk flushs every 100 lines
 
 before(async () => {
   // clean up clickhouse table
-  const client = getClickhouseClient();
+  const client = getClickhouseClient()!;
   await client.exec({
     query: STATEMENT_DROP_TABLE
   });
@@ -41,7 +43,7 @@ after(() => {
 describe('push log to cargo and flush manully', function() {
   this.timeout(20000);
 
-  const theCargo = createCargo(TABLE_NAME);
+  const theCargo: Cargo = createCargo(TABLE_NAME);
   debuglog('pathToCargoFile:', theCargo.pathToCargoFile);
 
   // clean up cargo file
@@ -85,7 +87,7 @@ describe('push log to cargo and flush manully', function() {
 describe('push log to cargo and flush automatically', function() {
   this.timeout(20000);
 
-  const theCargo = createCargo(`${TABLE_NAME}_set2`);
+  const theCargo: Cargo = createCargo(`${TABLE_NAME}_set2`);
 
   // clean up cargo file
   const folderOfCargoFile = path.dirname(theCargo.pathToCargoFile);

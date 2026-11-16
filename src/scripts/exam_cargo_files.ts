@@ -1,15 +1,16 @@
-const fs = require('fs');
-const path = require('path');
-const assert = require('assert');
-const _ = require('lodash');
+import fs from 'fs';
+import path from 'path';
+import assert from 'assert';
+import _ from 'lodash';
+
 const { log } = console;
 
 // Get the first command line argument
-const getFirstArgv = () => {
+const getFirstArgv = (): string => {
   return String((process.argv || [])[2] || '').trim();
 };
 
-const main = () => {
+const main = (): void => {
   const pathToCargoFiles = getFirstArgv();
   assert(fs.statSync(pathToCargoFiles).isDirectory(), `path: ${pathToCargoFiles} is not a directory.`);
 

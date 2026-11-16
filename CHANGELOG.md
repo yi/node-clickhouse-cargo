@@ -1,4 +1,13 @@
 
+2026/11/16 Version: 5.1.0
+===
+ 1. Codebase rewritten in TypeScript with `strict` compilation. Sources moved from `lib/` to `src/`; `npm run build` compiles them back into `lib/`, so the package entry `lib/index.js` is unchanged. `lib/` is now untracked build output, and all test scripts build before running.
+ 2. Ship TypeScript type declarations (`types: lib/index.d.ts`) for library consumers.
+ 3. Fix: pass `role` instead of `roles` to `@clickhouse/client`, so role configuration actually takes effect.
+ 4. npm publish: only compiled `lib/` is shipped via the `files` whitelist, and `prepublishOnly` forces a fresh build before packing.
+ 5. Remove unused `@apla/clickhouse` devDependency.
+ 6. README restructured into separate English/Chinese halves; fixed typos and broken sample code. Note: the config option `cargoPath` documented in previous README is actually `pathToCargoFolder`.
+
 2021/6/24 Version: 3.1.1
 ===
  1. Reduce unnecessary log.

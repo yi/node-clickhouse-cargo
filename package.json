@@ -1,16 +1,22 @@
 {
   "name": "clickhouse-cargo",
-  "version": "5.0.1",
+  "version": "5.1.0",
   "description": "Accumulates insert queries and commit them to clickhouse in batch jobs with retries on failure. 这个模块将向 Clickhouse 数据库的高频写入改为低频的批量插入。",
   "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "files": [
+    "lib"
+  ],
   "scripts": {
-    "chk-ck-files": "node ./lib/scripts/exam_cargo_files.js",
-    "test01": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/01-create-cargo.js -R spec",
-    "test02": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/02-push-to-cargo.js -R spec",
-    "test03": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/03-commit-bulk.js -R spec",
-    "test04": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/04-restore-local-bulks.js -R spec",
-    "test05": "export DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground node ./lib/cluster-test/05-restore-bulks-when-cluster.js",
-    "test": "export DISABLED_DEBUG=chcargo*; CLICKHOUSE_CARGO_PROFILE=playground nyc mocha --recursive ./lib/test -R spec"
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "chk-ck-files": "npm run build && node ./lib/scripts/exam_cargo_files.js",
+    "test01": "export DEBUG=chcargo*; npm run build && CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/01-create-cargo.js -R spec",
+    "test02": "export DEBUG=chcargo*; npm run build && CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/02-push-to-cargo.js -R spec",
+    "test03": "export DEBUG=chcargo*; npm run build && CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/03-commit-bulk.js -R spec",
+    "test04": "export DEBUG=chcargo*; npm run build && CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/04-restore-local-bulks.js -R spec",
+    "test05": "export DEBUG=chcargo*; npm run build && CLICKHOUSE_CARGO_PROFILE=playground node ./lib/cluster-test/05-restore-bulks-when-cluster.js",
+    "test": "export DISABLED_DEBUG=chcargo*; npm run build && CLICKHOUSE_CARGO_PROFILE=playground nyc mocha --recursive ./lib/test -R spec"
   },
   "repository": {
     "type": "git",
@@ -32,17 +38,22 @@
   },
   "homepage": "https://github.com/yi/node-clickhouse-cargo#readme",
   "devDependencies": {
-    "@apla/clickhouse": "^1.6.3",
-    "coffeescript": "^2.5.1",
+    "@types/debug": "^4.1.13",
+    "@types/lodash": "^4.17.27",
+    "@types/merge2": "^1.4.4",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^24.0.4",
+    "@types/split2": "^4.2.3",
     "lodash": "^4.17.20",
     "mkdirp": "^3.0.1",
     "mocha": "^8.1.3",
     "nyc": "^15.1.0",
-    "rimraf": "^4.4.1"
+    "rimraf": "^4.4.1",
+    "typescript": "^7.0.2"
   },
   "dependencies": {
-    "@clickhouse/client": "^1.9.1",
-    "debug": "^4.1.1",
+    "@clickhouse/client": "^1.25.0",
+    "debug": "^4.4.3",
     "merge2": "^1.4.1",
     "split2": "^4.2.0"
   }

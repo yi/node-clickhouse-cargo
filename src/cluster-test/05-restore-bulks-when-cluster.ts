@@ -1,12 +1,13 @@
-const { createCargo, isInited, getClickhouseClient } = require("../");
-const debuglog = require("debug")("chcargo:cluster-test:05");
-const assert = require("assert");
-const fs = require("fs");
-const os = require("os");
-const path = require("path");
-const cluster = require('cluster');
-const { rimrafSync } = require('rimraf');
-const { mkdirp } = require('mkdirp');
+import { createCargo, isInited, getClickhouseClient } from "../";
+import debug from "debug";
+import assert from "assert";
+import fs from "fs";
+import path from "path";
+import cluster from 'cluster';
+import { rimrafSync } from 'rimraf';
+import { mkdirp } from 'mkdirp';
+
+const debuglog = debug("chcargo:cluster-test:05");
 
 const TABLE_NAME = "default.unittest05";
 
@@ -28,7 +29,7 @@ const folderOfCargoFile = path.join(process.cwd(), "cargo_files");
 rimrafSync(folderOfCargoFile);
 mkdirp.sync(folderOfCargoFile);
 
-function prepareBulkCachFile(tableName, label) {
+function prepareBulkCachFile(tableName: string, label?: string): void {
   const theFilepath = path.join(
     process.cwd(),
     "cargo_files",
@@ -46,10 +47,10 @@ function prepareBulkCachFile(tableName, label) {
   fs.writeFileSync(theFilepath, content);
 }
 
-async function main() {
-  if (cluster.isMaster) {
-    debuglog("[isMaster] rebuild data table");
-    const clickHouseClient = getClickhouseClient();
+async function main(): Promise<void> {
+  if (cluster.isPrimary) {
+    debuglog("[isPrimary] rebuild data table");
+    const clickHouseClient = getClickhouseClient()!;
 
     await clickHouseClient.exec({
       query: STATEMENT_DROP_TABLE
@@ -73,12 +74,12 @@ async function main() {
     setInterval(proc, 20000);
 
   } else {
-    debuglog(`[isWorker ${cluster.worker.id}]`);
+    debuglog(`[isWorker ${cluster.worker!.id}]`);
     const theCargo = createCargo(TABLE_NAME);
     let StartCountWithinProcess = 0;
 
     const proc = () => {
-      const mark = `worker@${cluster.worker.id}:${StartCountWithinProcess++}`;
+      const mark = `worker@${cluster.worker!.id}:${StartCountWithinProcess++}`;
       debuglog("proc insert: ", mark);
 
       for (let i = 0; i < NUM_OF_LINE; i++) {
@@ -89,6 +90,7 @@ async function main() {
     setInterval(proc, 2000);
 
     const crashProc = () => {
+      // @ts-expect-error intentionally crash the worker to test flush-on-crash
       nonExistingFunc();
     };
 

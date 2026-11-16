@@ -1,11 +1,12 @@
-const { createCargo, isInited, init } = require('../');
-const assert = require('assert');
+import { createCargo, isInited } from '../';
+import assert from 'assert';
+import type { Cargo } from '../cargo';
 
 const QUERY = 'test.cargo0';
 const QUERY1 = 'test.cargo1';
 
 describe('init clickhouse_cargo', () => {
-  let cargo0 = null;
+  let cargo0: Cargo | null = null;
 
   after(() => {
     process.exit(0);
@@ -19,11 +20,11 @@ describe('init clickhouse_cargo', () => {
   it('cargo must be created with tableName', (done) => {
     assert.throws(() => {
       createCargo();
-    }, Error, /tableName/);
+    }, /tableName/);
 
     assert.throws(() => {
       createCargo('select * from dual');
-    }, Error, /tableName/);
+    }, /tableName/);
 
     cargo0 = createCargo(QUERY);
     //console.log(cargo0);

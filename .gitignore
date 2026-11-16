@@ -105,3 +105,6 @@ dist
 cargo_files/
 src/test/temp*
 lib/test/temp*
+
+# TypeScript compiled output (generated from src/ via `npm run build`)
+lib/
