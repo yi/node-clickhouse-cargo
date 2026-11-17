@@ -17,7 +17,7 @@ import cluster from "cluster";
 import { createClient } from "@clickhouse/client";
 import type { ClickHouseClient, ClickHouseClientConfigOptions } from "@clickhouse/client";
 import debug from "debug";
-import { Cargo } from "./cargo";
+import { Cargo, detectBadEscapeSupport } from "./cargo";
 import type { CargoOptions as ICargoOptions } from "./cargo";
 
 /** Identifies this process in log lines ("nocluster" when not running under cluster). */
@@ -84,6 +84,12 @@ function init(config: InitConfig): void {
   };
 
   ClickhouseClient = createClient(clickhouseClientOption);
+
+  // Warm up the server-version probe in the background: the result decides
+  // whether INSERTs may carry the bad-escape tolerance setting (v24.4+).
+  // detectBadEscapeSupport never rejects and retries on demand, so a down
+  // server at startup is harmless here.
+  void detectBadEscapeSupport(ClickhouseClient);
 
   // prepare disk path
   CargoOptions.pathToCargoFolder = path.resolve(process.cwd(), config.pathToCargoFolder || "cargo_files");

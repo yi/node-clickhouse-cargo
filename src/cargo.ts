@@ -39,22 +39,92 @@ let StaticCountWithinProcess = 0;
  *
  * - `wait_end_of_query` — only read the HTTP response after the INSERT has
  *   fully finished server-side, so failures surface as request errors.
- * - `input_format_json_throw_on_bad_escape_sequence` — tolerate invalid
- *   escape sequences inside JSON strings instead of failing the batch.
  * - `input_format_allow_errors_num` / `input_format_allow_errors_ratio` —
  *   silently skip rows that fail to parse (at most 10 rows or 1% of the
  *   batch). Skipped rows are lost, use scripts/exam_cargo_files to audit.
+ *
+ * Additionally, `input_format_json_throw_on_bad_escape_sequence: 0` (tolerate
+ * invalid escape sequences inside JSON strings) is appended by
+ * {@link buildInsertSettings} — but only when the connected server is v24.4 or
+ * newer, because older servers reject the whole INSERT with an
+ * "unknown setting" error instead of ignoring the unknown setting.
  */
-const CLICKHOUSE_SETTINGS = {
+const CLICKHOUSE_SETTINGS_BASE = {
   wait_end_of_query: 1 as const,
 
-  // tolerate invalid JSON escape sequences
-  input_format_json_throw_on_bad_escape_sequence: 0 as const,
-
-  // silently skip rows with other parsing errors
+  // silently skip rows with parsing errors
   input_format_allow_errors_num: "10",
   input_format_allow_errors_ratio: 0.01
 };
+
+/**
+ * Whether a ClickHouse server version understands the
+ * `input_format_json_throw_on_bad_escape_sequence` setting, introduced in
+ * v24.4. Unparsable versions count as unsupported (conservative fallback).
+ */
+export function supportsBadEscapeSetting(version: string): boolean {
+  const [major, minor] = version.split('.').map(Number);
+  if (!Number.isFinite(major) || !Number.isFinite(minor)) {
+    return false;
+  }
+  return major > 24 || (major === 24 && minor >= 4);
+}
+
+/**
+ * Per-INSERT settings: the base settings, plus the bad-escape tolerance when
+ * the connected server supports it (see {@link supportsBadEscapeSetting}).
+ */
+function buildInsertSettings(supportsBadEscape: boolean) {
+  if (supportsBadEscape) {
+    return {
+      ...CLICKHOUSE_SETTINGS_BASE,
+      input_format_json_throw_on_bad_escape_sequence: 0 as const
+    };
+  }
+  return CLICKHOUSE_SETTINGS_BASE;
+}
+
+/**
+ * Version probes that succeeded, cached per client for the process lifetime.
+ * Failed probes are removed again so the next INSERT round retries them.
+ */
+const CLIENT_TO_BAD_ESCAPE_SUPPORT = new WeakMap<ClickHouseClient, Promise<boolean>>();
+
+/**
+ * Probe the server behind `client` with `SELECT version()` and report whether
+ * it supports `input_format_json_throw_on_bad_escape_sequence`. The result is
+ * cached per client; concurrent callers share one in-flight probe. On probe
+ * failure (e.g. ClickHouse is down) nothing is cached and `false` is returned
+ * for the current round — omitting the setting is accepted by every server
+ * version, and the probe is retried on the next INSERT round.
+ */
+export async function detectBadEscapeSupport(client: ClickHouseClient): Promise<boolean> {
+  const cached = CLIENT_TO_BAD_ESCAPE_SUPPORT.get(client);
+  if (cached) {
+    return cached;
+  }
+
+  const probing = (async () => {
+    const resultSet = await client.query({
+      query: 'SELECT version() AS version',
+      format: 'JSONEachRow'
+    });
+    const [{ version }] = await resultSet.json<{ version: string }>();
+    const supported = supportsBadEscapeSetting(version);
+    debuglog(`[detectBadEscapeSupport] server version:${version}, badEscapeSetting:${supported ? 'supported' : 'unsupported'}`);
+    return supported;
+  })();
+
+  CLIENT_TO_BAD_ESCAPE_SUPPORT.set(client, probing);
+
+  try {
+    return await probing;
+  } catch (err) {
+    CLIENT_TO_BAD_ESCAPE_SUPPORT.delete(client); // do not cache failures
+    debuglog(`[detectBadEscapeSupport] probe FAILED, assume unsupported for this round. error:`, err);
+    return false;
+  }
+}
 
 /** Rows are serialized in ClickHouse's JSONCompactEachRow format: one JSON array of column values per line. */
 const CLICKHOUSE_INPUT_FORMAT = 'JSONCompactEachRow';
@@ -215,11 +285,12 @@ export class Cargo {
    */
   async uploadCargoFile(filepath: string): Promise<InsertResult> {
     debuglog(`[uploadCargoFile ${this.tableName}] filepath:`, filepath);
+    const supportsBadEscape = await detectBadEscapeSupport(this.clickhouseClient);
     return await this.clickhouseClient.insert({
       table: this.tableName,
       format: CLICKHOUSE_INPUT_FORMAT,
       values: fs.createReadStream(filepath),
-      clickhouse_settings: CLICKHOUSE_SETTINGS
+      clickhouse_settings: buildInsertSettings(supportsBadEscape)
     });
   }
 
@@ -249,11 +320,12 @@ export class Cargo {
     }
     debuglog(`[uploadLocalUncommitsToClickhouse] combinedStream  ${listOfFileStreams.length}`);
 
+    const supportsBadEscape = await detectBadEscapeSupport(this.clickhouseClient);
     await this.clickhouseClient.insert({
       table: this.tableName,
       format: CLICKHOUSE_INPUT_FORMAT,
       values: combinedStream,
-      clickhouse_settings: CLICKHOUSE_SETTINGS
+      clickhouse_settings: buildInsertSettings(supportsBadEscape)
     });
 
     // Remove successfully committed local files

@@ -1,5 +1,6 @@
 import { createCargo, isInited } from '../';
 import assert from 'assert';
+import { supportsBadEscapeSetting } from '../cargo';
 import type { Cargo } from '../cargo';
 
 const QUERY = 'test.cargo0';
@@ -7,10 +8,6 @@ const QUERY1 = 'test.cargo1';
 
 describe('init clickhouse_cargo', () => {
   let cargo0: Cargo | null = null;
-
-  after(() => {
-    process.exit(0);
-  });
 
   it('auto init when env set', (done) => {
     assert(isInited(), 'should auto init when env set');
@@ -45,4 +42,36 @@ describe('init clickhouse_cargo', () => {
     assert(cargo4 !== cargo3);
     done();
   });
+});
+
+describe('supportsBadEscapeSetting', () => {
+  // the setting was introduced in ClickHouse v24.4
+  it('v24.4 is the first supported version', () => {
+    assert.strictEqual(supportsBadEscapeSetting('24.4'), true);
+    assert.strictEqual(supportsBadEscapeSetting('24.4.1'), true);
+    assert.strictEqual(supportsBadEscapeSetting('24.4.2.2283'), true);
+  });
+
+  it('versions below v24.4 are unsupported', () => {
+    assert.strictEqual(supportsBadEscapeSetting('24.3'), false);
+    assert.strictEqual(supportsBadEscapeSetting('24.3.9.2913'), false);
+    assert.strictEqual(supportsBadEscapeSetting('23.8'), false);
+    assert.strictEqual(supportsBadEscapeSetting('1.1.54384'), false);
+  });
+
+  it('versions above v24 are supported', () => {
+    assert.strictEqual(supportsBadEscapeSetting('25.1'), true);
+    assert.strictEqual(supportsBadEscapeSetting('25.12.3.71'), true);
+  });
+
+  it('unparsable versions count as unsupported', () => {
+    assert.strictEqual(supportsBadEscapeSetting(''), false);
+    assert.strictEqual(supportsBadEscapeSetting('unknown'), false);
+    assert.strictEqual(supportsBadEscapeSetting('24'), false); // no minor part
+  });
+});
+
+// exit explicitly: the background exam loop keeps the process alive
+after(() => {
+  process.exit(0);
 });

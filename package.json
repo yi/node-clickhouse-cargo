@@ -1,6 +1,6 @@
 {
   "name": "clickhouse-cargo",
-  "version": "5.1.0",
+  "version": "5.2.0",
   "description": "Accumulates insert queries and commit them to clickhouse in batch jobs with retries on failure. 这个模块将向 Clickhouse 数据库的高频写入改为低频的批量插入。",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -8,14 +8,21 @@
     "lib"
   ],
   "scripts": {
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "lint:strict": "oxlint --deny-warnings",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "quality": "pnpm run format:check && pnpm run lint && pnpm run typecheck",
     "build": "tsc",
     "prepublishOnly": "npm run build",
     "chk-ck-files": "npm run build && node ./lib/scripts/exam_cargo_files.js",
-    "test01": "export DEBUG=chcargo*; npm run build && CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/01-create-cargo.js -R spec",
-    "test02": "export DEBUG=chcargo*; npm run build && CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/02-push-to-cargo.js -R spec",
-    "test03": "export DEBUG=chcargo*; npm run build && CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/03-commit-bulk.js -R spec",
-    "test04": "export DEBUG=chcargo*; npm run build && CLICKHOUSE_CARGO_PROFILE=playground nyc mocha ./lib/test/04-restore-local-bulks.js -R spec",
-    "test05": "export DEBUG=chcargo*; npm run build && CLICKHOUSE_CARGO_PROFILE=playground node ./lib/cluster-test/05-restore-bulks-when-cluster.js",
+    "test01": "export DEBUG=chcargo*; npm run build && CLICKHOUSE_CARGO_PROFILE=chclient-playground nyc mocha ./lib/test/01-create-cargo.js -R spec",
+    "test02": "export DEBUG=chcargo*; npm run build && CLICKHOUSE_CARGO_PROFILE=chclient-playground nyc mocha ./lib/test/02-push-to-cargo.js -R spec",
+    "test03": "export DEBUG=chcargo*; npm run build && CLICKHOUSE_CARGO_PROFILE=chclient-playground nyc mocha ./lib/test/03-commit-bulk.js -R spec",
+    "test04": "export DEBUG=chcargo*; npm run build && CLICKHOUSE_CARGO_PROFILE=chclient-playground nyc mocha ./lib/test/04-restore-local-bulks.js -R spec",
+    "test05": "export DEBUG=chcargo*; npm run build && CLICKHOUSE_CARGO_PROFILE=chclient-playground node ./lib/cluster-test/05-restore-bulks-when-cluster.js",
     "test": "export DISABLED_DEBUG=chcargo*; npm run build && CLICKHOUSE_CARGO_PROFILE=playground nyc mocha --recursive ./lib/test -R spec"
   },
   "repository": {
@@ -44,6 +51,8 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "^26.6.6",
     "@types/split2": "^4.2.3",
+    "oxfmt": "^0.79.0",
+    "oxlint": "^1.94.0",
     "lodash": "^4.18.1",
     "mkdirp": "^3.0.1",
     "mocha": "^12.0.3",

@@ -1,4 +1,10 @@
 
+2026/11/17 Version: 5.2.0
+===
+ 1. Automatically adapt `clickhouse_settings` to the ClickHouse server version: `input_format_json_throw_on_bad_escape_sequence` (introduced in server v24.4) is now only sent when the connected server supports it. Older servers reject the whole INSERT with an `Unknown setting` error, which blocked commits entirely (verified against a 22.2 server).
+ 2. The server version is probed once per client with `SELECT version()` — kicked off in the background right after `init()`, cached for the process lifetime and shared by concurrent INSERTs. When the probe fails (e.g. ClickHouse is down) nothing is cached, the setting is omitted for the current round (accepted by every server version), and the probe is retried on the next commit round.
+ 3. Unit tests for the version comparison logic (`supportsBadEscapeSetting`).
+
 2026/11/16 Version: 5.1.0
 ===
  1. Codebase rewritten in TypeScript with `strict` compilation. Sources moved from `lib/` to `src/`; `npm run build` compiles them back into `lib/`, so the package entry `lib/index.js` is unchanged. `lib/` is now untracked build output, and all test scripts build before running.
